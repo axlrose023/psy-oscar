@@ -5,7 +5,10 @@ from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, Depends, Path
 from fastapi.params import Query
 
-from app.api.modules.auth.services.auth import AuthenticateUser
+from app.api.modules.auth.services.auth import (
+    AuthenticateAdmin,
+    AuthenticatePsychologist,
+)
 from app.api.modules.users.models import User
 from app.api.modules.users.schema import (
     CreateUserRequest,
@@ -22,6 +25,7 @@ router = APIRouter(route_class=DishkaRoute)
 async def create_user(
     request: CreateUserRequest,
     service: FromDishka[UserService],
+    current_user: User = Depends(AuthenticateAdmin()),
 ) -> UserResponse:
     return await service.create_user(request)
 
@@ -29,7 +33,7 @@ async def create_user(
 @router.get("", response_model=UsersPaginationResponse)
 async def get_users(
     service: FromDishka[UserService],
-    current_user: User = Depends(AuthenticateUser()),
+    current_user: User = Depends(AuthenticatePsychologist()),
     params: UsersPaginationParams = Query(),
 ) -> UsersPaginationResponse:
     return await service.get_users(params=params)
@@ -38,7 +42,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user_by_id(
     service: FromDishka[UserService],
-    current_user: User = Depends(AuthenticateUser()),
+    current_user: User = Depends(AuthenticatePsychologist()),
     user_id: UUID = Path(...),
 ) -> UserResponse:
     return await service.get_user_by_id(user_id)

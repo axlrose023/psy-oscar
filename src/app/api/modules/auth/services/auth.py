@@ -1,9 +1,11 @@
+from collections.abc import Iterable
 from uuid import UUID
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
+from app.api.modules.users.enums import UserRole
 from app.api.modules.users.models import User
 from app.database.uow import UnitOfWork
 from app.settings import Config
@@ -12,6 +14,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 
 class AuthenticateUser:
+    required_role: UserRole | tuple[UserRole, ...] | None = None
+
     async def __call__(
         self,
         request: Request,
@@ -30,7 +34,24 @@ class AuthenticateUser:
     ) -> User:
         credential_exception = self._build_credential_exception()
         payload = self._validate_token(token, config, credential_exception)
-        return await self._get_user(uow, payload["sub"], credential_exception)
+        user = await self._get_user(uow, payload["sub"], credential_exception)
+        self._check_role(user)
+        return user
+
+    def _check_role(self, user: User) -> None:
+        if self.required_role is None:
+            return
+
+        if isinstance(self.required_role, Iterable):
+            if user.role in self.required_role:
+                return
+        elif user.role == self.required_role:
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have enough permissions",
+        )
 
     def _validate_token(
         self,
@@ -75,3 +96,15 @@ class AuthenticateUser:
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+class AuthenticateAdmin(AuthenticateUser):
+    required_role = UserRole.admin
+
+
+class AuthenticatePsychologist(AuthenticateUser):
+    required_role = (UserRole.admin, UserRole.psychologist)
+
+
+class AuthenticateRespondent(AuthenticateUser):
+    required_role = (UserRole.admin, UserRole.psychologist, UserRole.respondent)

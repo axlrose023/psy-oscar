@@ -3,12 +3,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.common.schema import Pagination, PaginationParams
+from app.api.modules.users.enums import UserRole
 
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     username: str
+    role: UserRole
 
 
 class UsersPaginationResponse(Pagination[UserResponse]):
@@ -25,5 +27,6 @@ class UsersPaginationParams(PaginationParams):
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
+    role: UserRole = UserRole.respondent
 
     model_config = ConfigDict(extra="forbid")

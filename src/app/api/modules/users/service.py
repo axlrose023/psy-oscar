@@ -55,6 +55,7 @@ class UserService:
         user = User(
             username=request.username,
             password=hashed_password,
+            role=request.role,
             is_active=True,
         )
         await self.uow.users.create(user)
