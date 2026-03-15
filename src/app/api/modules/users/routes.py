@@ -9,6 +9,7 @@ from app.api.modules.auth.services.auth import (
     AuthenticateAdmin,
     AuthenticatePsychologist,
 )
+from app.api.modules.users.manager import UserService
 from app.api.modules.users.models import User
 from app.api.modules.users.schema import (
     CreateUserRequest,
@@ -16,7 +17,6 @@ from app.api.modules.users.schema import (
     UsersPaginationParams,
     UsersPaginationResponse,
 )
-from app.api.modules.users.service import UserService
 
 router = APIRouter(route_class=DishkaRoute)
 

@@ -2,12 +2,12 @@ from dishka import FromDishka
 from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter
 
+from app.api.modules.auth.manager import AuthService
 from app.api.modules.auth.schema import (
     LoginRequest,
     RefreshRequest,
     TokenPairResponse,
 )
-from app.api.modules.auth.service import AuthService
 from app.api.modules.auth.services.jwt import JwtService
 from app.database.uow import UnitOfWork
 

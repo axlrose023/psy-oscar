@@ -3,9 +3,9 @@ from collections.abc import AsyncIterator
 from dishka import AsyncContainer, Provider, Scope, make_async_container, provide
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.modules.auth.service import AuthService
+from app.api.modules.auth.manager import AuthService
 from app.api.modules.auth.services import JwtService
-from app.api.modules.users.service import UserService
+from app.api.modules.users.manager import UserService
 from app.clients.providers import HttpClientsProvider
 from app.database.engine import SessionFactory
 from app.database.uow import UnitOfWork
