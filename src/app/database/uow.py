@@ -2,15 +2,26 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.modules.tasks.gateway import (
+    TaskCommentGateway,
+    TaskGateway,
+    TaskHistoryGateway,
+)
 from app.api.modules.users.gateway import UserGateway
 
 
 class UnitOfWork:
     users: UserGateway
+    tasks: TaskGateway
+    task_history: TaskHistoryGateway
+    task_comments: TaskCommentGateway
 
     def __init__(self, session: AsyncSession):
         self.session = session
         self.users = UserGateway(session)
+        self.tasks = TaskGateway(session)
+        self.task_history = TaskHistoryGateway(session)
+        self.task_comments = TaskCommentGateway(session)
 
     async def __aenter__(self):
         return self
