@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import BinaryExpression, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.modules.users.models import User
 
@@ -32,7 +33,28 @@ class UserGateway:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_detail_by_id(self, user_id: UUID) -> User | None:
+        stmt = (
+            select(User)
+            .options(
+                selectinload(User.family_members),
+                selectinload(User.education),
+                selectinload(User.courses),
+                selectinload(User.disciplines),
+                selectinload(User.documents),
+            )
+            .where(User.id == user_id)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def create(self, user: User) -> User:
         self.session.add(user)
+        await self.session.flush()
+        return user
+
+    async def update(self, user: User, data: dict) -> User:
+        for key, value in data.items():
+            setattr(user, key, value)
         await self.session.flush()
         return user
