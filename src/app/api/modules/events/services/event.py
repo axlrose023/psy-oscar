@@ -136,6 +136,7 @@ class EventService(EventManager):
     ) -> Event:
         event = await self._get_event_or_404(event_id)
         self._ensure_can_modify(event, current_user)
+        self._ensure_modifiable(event)
         if event.status not in (EventStatus.DRAFT, EventStatus.PLANNED, EventStatus.OVERDUE):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -157,6 +158,7 @@ class EventService(EventManager):
     ) -> Event:
         event = await self._get_event_or_404(event_id)
         self._ensure_can_modify(event, current_user)
+        self._ensure_modifiable(event)
         if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -179,6 +181,7 @@ class EventService(EventManager):
     ) -> Event:
         event = await self._get_event_or_404(event_id)
         self._ensure_can_modify(event, current_user)
+        self._ensure_modifiable(event)
         if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

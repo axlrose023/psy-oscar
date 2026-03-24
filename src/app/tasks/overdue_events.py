@@ -35,7 +35,7 @@ async def check_overdue_events(uow: FromDishka[UnitOfWork]):
     for event_id in overdue_ids:
         history = EventHistory(
             event_id=event_id,
-            changed_by_id=event_id,  # system action, use event_id as placeholder
+            changed_by_id=None,
             event_type="overdue",
             description="Automatically marked as overdue",
         )

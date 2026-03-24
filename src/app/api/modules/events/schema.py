@@ -122,7 +122,7 @@ class EventHistoryResponse(BaseModel):
     event_type: str
     description: str | None
     created_at: datetime.datetime
-    changed_by: EventUserResponse
+    changed_by: EventUserResponse | None
 
 
 # --- Pagination ---

@@ -68,7 +68,7 @@ def upgrade() -> None:
         "event_history",
         sa.Column("id", sa.Integer(), autoincrement=True, primary_key=True),
         sa.Column("event_id", sa.UUID(), sa.ForeignKey("events.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("changed_by_id", sa.UUID(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("changed_by_id", sa.UUID(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=True),
         sa.Column("event_type", sa.String(50), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.current_timestamp()),

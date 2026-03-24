@@ -46,7 +46,11 @@ class EventManager:
         if (
             event.status in (EventStatus.DRAFT, EventStatus.PLANNED)
             and event.execution_deadline
-            and event.execution_deadline < datetime.now(UTC)
         ):
-            event.status = EventStatus.OVERDUE
+            now = datetime.now(UTC)
+            deadline = event.execution_deadline
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=UTC)
+            if deadline < now:
+                event.status = EventStatus.OVERDUE
         return event

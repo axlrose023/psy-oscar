@@ -99,8 +99,8 @@ class EventHistory(Base):
     event_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), nullable=False
     )
-    changed_by_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    changed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     event_type: Mapped[str] = mapped_column(String(50))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
