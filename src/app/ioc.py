@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.modules.auth.manager import AuthService
 from app.api.modules.auth.services import JwtService
+from app.api.modules.events.services.event import EventService
+from app.api.modules.events.services.history import EventHistoryService
 from app.api.modules.tasks.services.comment import CommentService
 from app.api.modules.tasks.services.history import HistoryService
 from app.api.modules.tasks.services.task import TaskService
@@ -63,6 +65,14 @@ class ServicesProvider(Provider):
     @provide(scope=Scope.REQUEST)
     async def get_comment_service(self, uow: UnitOfWork) -> CommentService:
         return CommentService(uow)
+
+    @provide(scope=Scope.REQUEST)
+    async def get_event_service(self, uow: UnitOfWork) -> EventService:
+        return EventService(uow)
+
+    @provide(scope=Scope.REQUEST)
+    async def get_event_history_service(self, uow: UnitOfWork) -> EventHistoryService:
+        return EventHistoryService(uow)
 
 
 def get_async_container() -> AsyncContainer:

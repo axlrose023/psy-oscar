@@ -2,6 +2,7 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.modules.events.gateway import EventGateway, EventHistoryGateway
 from app.api.modules.tasks.gateway import (
     TaskCommentGateway,
     TaskGateway,
@@ -15,6 +16,8 @@ class UnitOfWork:
     tasks: TaskGateway
     task_history: TaskHistoryGateway
     task_comments: TaskCommentGateway
+    events: EventGateway
+    event_history: EventHistoryGateway
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -22,6 +25,8 @@ class UnitOfWork:
         self.tasks = TaskGateway(session)
         self.task_history = TaskHistoryGateway(session)
         self.task_comments = TaskCommentGateway(session)
+        self.events = EventGateway(session)
+        self.event_history = EventHistoryGateway(session)
 
     async def __aenter__(self):
         return self
