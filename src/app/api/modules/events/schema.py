@@ -26,8 +26,8 @@ class CreateEventRequest(BaseModel):
     activity_type: ActivityType
     content: str | None = None
     target_unit: str | None = Field(None, max_length=200)
-    target_person_id: UUID | None = None
-    target_person_name: str | None = Field(None, max_length=100)
+    respondent_id: UUID | None = None
+    respondent_name: str | None = Field(None, max_length=100)
     personnel_category: PersonnelCategory | None = None
     planned_count: int | None = Field(None, ge=0)
     actual_count: int | None = Field(None, ge=0)
@@ -49,8 +49,8 @@ class UpdateEventRequest(BaseModel):
     activity_type: ActivityType | None = None
     content: str | None = None
     target_unit: str | None = Field(None, max_length=200)
-    target_person_id: UUID | None = None
-    target_person_name: str | None = Field(None, max_length=100)
+    respondent_id: UUID | None = None
+    respondent_name: str | None = Field(None, max_length=100)
     personnel_category: PersonnelCategory | None = None
     planned_count: int | None = Field(None, ge=0)
     actual_count: int | None = Field(None, ge=0)
@@ -95,8 +95,8 @@ class EventResponse(BaseModel):
     activity_type: ActivityType
     content: str | None
     target_unit: str | None
-    target_person_id: UUID | None
-    target_person_name: str | None
+    respondent_id: UUID | None
+    respondent_name: str | None
     personnel_category: PersonnelCategory | None
     planned_count: int | None
     actual_count: int | None
@@ -134,6 +134,7 @@ class EventsPaginationParams(PaginationParams):
     activity_type: ActivityType | None = None
     status: EventStatus | None = None
     psychologist_id: UUID | None = None
+    respondent_id: UUID | None = None
     is_archived: bool = False
 
 
