@@ -33,10 +33,10 @@ class Event(Base, UUID7IDMixin, DateTimeMixin):
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     target_unit: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    target_person_id: Mapped[uuid.UUID | None] = mapped_column(
+    respondent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    target_person_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    respondent_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     personnel_category: Mapped[PersonnelCategory | None] = mapped_column(
         Enum(PersonnelCategory, name="personnel_category"), nullable=True
     )
