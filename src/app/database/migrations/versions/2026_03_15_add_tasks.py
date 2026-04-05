@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "c2d3e4f5a6b7"
 down_revision: str | None = "b1c2d3e4f5a6"
@@ -21,6 +22,12 @@ task_status_enum = sa.Enum(
     "revision_requested", "completed",
     name="task_status",
 )
+task_status_column_enum = postgresql.ENUM(
+    "created", "assigned", "in_progress", "under_review",
+    "revision_requested", "completed",
+    name="task_status",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
@@ -30,7 +37,7 @@ def upgrade() -> None:
         "tasks",
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("status", task_status_enum, nullable=False, server_default="created"),
+        sa.Column("status", task_status_column_enum, nullable=False, server_default="created"),
         sa.Column("deadline", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_by_id", sa.UUID(), sa.ForeignKey("users.id"), nullable=False),

@@ -7,6 +7,7 @@ from app.api.modules.auth.manager import AuthService
 from app.api.modules.auth.services import JwtService
 from app.api.modules.events.services.event import EventService
 from app.api.modules.events.services.history import EventHistoryService
+from app.api.modules.notifications.service import NotificationService
 from app.api.modules.tasks.services.comment import CommentService
 from app.api.modules.tasks.services.history import HistoryService
 from app.api.modules.tasks.services.task import TaskService
@@ -55,8 +56,8 @@ class ServicesProvider(Provider):
         return UserService(uow, auth_service)
 
     @provide(scope=Scope.REQUEST)
-    async def get_task_service(self, uow: UnitOfWork) -> TaskService:
-        return TaskService(uow)
+    async def get_task_service(self, uow: UnitOfWork, notification_service: NotificationService) -> TaskService:
+        return TaskService(uow, notification_service)
 
     @provide(scope=Scope.REQUEST)
     async def get_history_service(self, uow: UnitOfWork) -> HistoryService:
@@ -73,6 +74,10 @@ class ServicesProvider(Provider):
     @provide(scope=Scope.REQUEST)
     async def get_event_history_service(self, uow: UnitOfWork) -> EventHistoryService:
         return EventHistoryService(uow)
+
+    @provide(scope=Scope.REQUEST)
+    async def get_notification_service(self, uow: UnitOfWork) -> NotificationService:
+        return NotificationService(uow)
 
 
 def get_async_container() -> AsyncContainer:

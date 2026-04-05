@@ -14,7 +14,11 @@ class User(Base, UUID7IDMixin, DateTimeMixin):
     username: Mapped[str] = mapped_column(String, index=True)
     password: Mapped[str] = mapped_column(String)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role"),
+        Enum(
+            UserRole,
+            name="user_role",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=UserRole.respondent,
     )
     is_active: Mapped[bool] = mapped_column(default=True)

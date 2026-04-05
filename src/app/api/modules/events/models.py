@@ -28,7 +28,12 @@ class Event(Base, UUID7IDMixin, DateTimeMixin):
     start_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
     end_time: Mapped[datetime.time | None] = mapped_column(Time, nullable=True)
     activity_type: Mapped[ActivityType] = mapped_column(
-        Enum(ActivityType, name="activity_type"), nullable=False
+        Enum(
+            ActivityType,
+            name="activity_type",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -38,7 +43,12 @@ class Event(Base, UUID7IDMixin, DateTimeMixin):
     )
     respondent_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     personnel_category: Mapped[PersonnelCategory | None] = mapped_column(
-        Enum(PersonnelCategory, name="personnel_category"), nullable=True
+        Enum(
+            PersonnelCategory,
+            name="personnel_category",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=True,
     )
 
     planned_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -53,7 +63,11 @@ class Event(Base, UUID7IDMixin, DateTimeMixin):
     )
 
     status: Mapped[EventStatus] = mapped_column(
-        Enum(EventStatus, name="event_status"),
+        Enum(
+            EventStatus,
+            name="event_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         server_default="draft",
         default=EventStatus.DRAFT,
     )

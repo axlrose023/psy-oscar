@@ -3,6 +3,7 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.modules.events.gateway import EventGateway, EventHistoryGateway
+from app.api.modules.notifications.gateway import NotificationGateway
 from app.api.modules.tasks.gateway import (
     TaskCommentGateway,
     TaskGateway,
@@ -18,6 +19,7 @@ class UnitOfWork:
     task_comments: TaskCommentGateway
     events: EventGateway
     event_history: EventHistoryGateway
+    notifications: NotificationGateway
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -27,6 +29,7 @@ class UnitOfWork:
         self.task_comments = TaskCommentGateway(session)
         self.events = EventGateway(session)
         self.event_history = EventHistoryGateway(session)
+        self.notifications = NotificationGateway(session)
 
     async def __aenter__(self):
         return self

@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import HTTPException, status
 
 from app.api.common.utils import build_filters
+from app.api.modules.notifications.service import NotificationService
 from app.api.modules.tasks.enums import TaskStatus
 from app.api.modules.tasks.manager import TaskManager
 from app.api.modules.tasks.models import Task, TaskAssignee
@@ -21,6 +22,17 @@ from app.api.modules.users.models import User
 
 
 class TaskService(TaskManager):
+
+    def __init__(self, uow, notification_service: NotificationService | None = None):
+        super().__init__(uow)
+        self._notifications = notification_service
+
+    async def _notify(self, **kwargs) -> None:
+        if self._notifications:
+            try:
+                await self._notifications.create(**kwargs)
+            except Exception:
+                pass  # Notifications are non-critical
 
     # --- Admin endpoints ---
 
@@ -57,18 +69,39 @@ class TaskService(TaskManager):
         self, task_id: UUID, request: UpdateTaskRequest, current_user: User
     ) -> Task:
         task = await self._get_task_or_404(task_id)
-        self._ensure_not_completed(task)
+        self._ensure_has_access(task, current_user)
 
-        if request.title is not None:
-            task.title = request.title
-        if request.description is not None:
-            task.description = request.description
-        if request.priority is not None:
-            task.priority = request.priority
-        if request.deadline is not None:
-            task.deadline = request.deadline
+        # Only block field edits on completed tasks; status changes are always allowed
+        fields_changed = any([
+            request.title is not None,
+            request.description is not None,
+            request.priority is not None,
+            request.deadline is not None,
+        ])
+        if fields_changed:
+            self._ensure_not_completed(task)
+            if request.title is not None:
+                task.title = request.title
+            if request.description is not None:
+                task.description = request.description
+            if request.priority is not None:
+                task.priority = request.priority
+            if request.deadline is not None:
+                task.deadline = request.deadline
+            await self._record_history(task.id, current_user.id, "updated", "Task updated")
 
-        await self._record_history(task.id, current_user.id, "updated", "Task updated")
+        if request.status is not None and request.status != task.status:
+            old_status = task.status.value
+            task.status = request.status
+            if request.status == TaskStatus.COMPLETED and not task.completed_at:
+                task.completed_at = datetime.now(UTC)
+            elif request.status != TaskStatus.COMPLETED:
+                task.completed_at = None
+            await self._record_history(
+                task.id, current_user.id, "status_changed",
+                f"{old_status} → {request.status.value}",
+            )
+
         await self.uow.commit()
         return await self.uow.tasks.get_by_id(task.id)
 
@@ -84,6 +117,18 @@ class TaskService(TaskManager):
             task.status = TaskStatus.ASSIGNED
 
         tid = task.id
+        title = task.title
+        # Notify each new assignee
+        for uid in request.assigned_to_ids:
+            await self._notify(
+                user_id=uid,
+                type="task_assigned",
+                title=f"Вас призначено виконавцем задачі",
+                body=f'«{title}»',
+                entity_type="task",
+                entity_id=tid,
+            )
+
         await self.uow.commit()
         self.uow.session.expunge(task)
         return await self.uow.tasks.get_by_id(tid)
@@ -133,6 +178,16 @@ class TaskService(TaskManager):
         await self._record_history(
             task.id, current_user.id, "revision_requested", body.comment
         )
+        # Notify all assignees
+        for a in task.assignees:
+            await self._notify(
+                user_id=a.user_id,
+                type="task_revision",
+                title="Задача повернута на доопрацювання",
+                body=f'«{task.title}»' + (f': {body.comment}' if body.comment else ''),
+                entity_type="task",
+                entity_id=task.id,
+            )
         await self.uow.commit()
         return await self.uow.tasks.get_by_id(task.id)
 
@@ -146,6 +201,16 @@ class TaskService(TaskManager):
         task.status = TaskStatus.COMPLETED
         task.completed_at = datetime.now(UTC)
         await self._record_history(task.id, current_user.id, "completed", "Task approved")
+        # Notify all assignees
+        for a in task.assignees:
+            await self._notify(
+                user_id=a.user_id,
+                type="task_approved",
+                title="Задача схвалена та завершена",
+                body=f'«{task.title}»',
+                entity_type="task",
+                entity_id=task.id,
+            )
         await self.uow.commit()
         return await self.uow.tasks.get_by_id(task.id)
 

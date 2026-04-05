@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "d3e4f5a6b7c8"
 down_revision: str | None = "c2d3e4f5a6b7"
@@ -20,6 +21,11 @@ task_priority_enum = sa.Enum(
     "low", "medium", "high", "critical",
     name="task_priority",
 )
+task_priority_column_enum = postgresql.ENUM(
+    "low", "medium", "high", "critical",
+    name="task_priority",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
@@ -28,7 +34,7 @@ def upgrade() -> None:
     op.add_column(
         "tasks",
         sa.Column(
-            "priority", task_priority_enum,
+            "priority", task_priority_column_enum,
             nullable=False, server_default="medium",
         ),
     )

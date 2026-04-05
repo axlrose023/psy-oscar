@@ -11,7 +11,6 @@ from app.api.modules.tasks.schema import (
     RevisionRequestBody,
     TaskResponse,
     UnassignTaskRequest,
-    UpdateTaskRequest,
 )
 from app.api.modules.tasks.services.task import TaskService
 from app.api.modules.users.models import User
@@ -27,15 +26,6 @@ async def create_task(
 ) -> TaskResponse:
     return await service.create_task(request, current_user)
 
-
-@router.patch("/{task_id}", response_model=TaskResponse)
-async def update_task(
-    request: UpdateTaskRequest,
-    service: FromDishka[TaskService],
-    current_user: User = Depends(AuthenticateAdmin()),
-    task_id: UUID = Path(...),
-) -> TaskResponse:
-    return await service.update_task(task_id, request, current_user)
 
 
 @router.post("/{task_id}/assign", response_model=TaskResponse)

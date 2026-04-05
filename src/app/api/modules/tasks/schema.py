@@ -40,6 +40,7 @@ class UpdateTaskRequest(BaseModel):
     description: str | None = None
     priority: TaskPriority | None = None
     deadline: datetime.datetime | None = None
+    status: TaskStatus | None = None
 
     model_config = ConfigDict(extra="forbid")
 

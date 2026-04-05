@@ -35,7 +35,7 @@ class APIConfig(BaseModel):
     host: str = "0.0.0.0"
     allowed_hosts: list[str]
 
-    page_max_size: int = 100
+    page_max_size: int = 500
     page_default_size: int = 10
 
 

@@ -176,3 +176,10 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local tooling and external repos
+HelperCoreBack/
+frontend/ui-ux-pro-max-skill/
+frontend_original/
+TASKS.md
+instruction.docx

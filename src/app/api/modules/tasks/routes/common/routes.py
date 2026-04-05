@@ -13,6 +13,7 @@ from app.api.modules.tasks.schema import (
     TaskResponse,
     TasksPaginationParams,
     TasksPaginationResponse,
+    UpdateTaskRequest,
 )
 from app.api.modules.tasks.services.comment import CommentService
 from app.api.modules.tasks.services.history import HistoryService
@@ -29,6 +30,16 @@ async def get_tasks(
     params: TasksPaginationParams = Query(),
 ) -> TasksPaginationResponse:
     return await service.get_tasks(params, current_user)
+
+
+@router.patch("/{task_id}", response_model=TaskResponse)
+async def update_task(
+    request: UpdateTaskRequest,
+    service: FromDishka[TaskService],
+    current_user: User = Depends(AuthenticatePsychologist()),
+    task_id: UUID = Path(...),
+) -> TaskResponse:
+    return await service.update_task(task_id, request, current_user)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

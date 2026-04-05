@@ -30,11 +30,19 @@ class Task(Base, UUID7IDMixin, DateTimeMixin):
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, name="task_status"),
+        Enum(
+            TaskStatus,
+            name="task_status",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=TaskStatus.CREATED,
     )
     priority: Mapped[TaskPriority] = mapped_column(
-        Enum(TaskPriority, name="task_priority"),
+        Enum(
+            TaskPriority,
+            name="task_priority",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         default=TaskPriority.MEDIUM,
     )
     deadline: Mapped[datetime.datetime | None] = mapped_column(

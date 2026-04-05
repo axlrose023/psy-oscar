@@ -35,6 +35,14 @@ class EventService(EventManager):
                     detail="Time overlap with another event for this psychologist",
                 )
 
+        if request.task_id:
+            task = await self.uow.tasks.get_by_id(request.task_id)
+            if task is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Task not found",
+                )
+
         event = Event(
             date=request.date,
             start_time=request.start_time,

@@ -1,284 +1,341 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import { EventInput, DateSelectArg, EventClickArg } from "@fullcalendar/core";
+import type {
+  EventInput,
+  DatesSetArg,
+  DateSelectArg,
+  EventClickArg,
+  EventContentArg,
+} from "@fullcalendar/core";
+import PageMeta from "../components/common/PageMeta";
+import Button from "../components/ui/button/Button";
 import { Modal } from "../components/ui/modal";
 import { useModal } from "../hooks/useModal";
-import PageMeta from "../components/common/PageMeta";
+import { useAuth } from "../context/AuthContext";
+import { getEvents, createEvent } from "../api/events";
+import { ACTIVITY_LABELS, EVENT_STATUS_CALENDAR_COLORS } from "../types/event";
+import type { EventResponse, ActivityType, EventStatus } from "../types/event";
 
-interface CalendarEvent extends EventInput {
-  extendedProps: {
-    calendar: string;
-  };
+const CALENDAR_VISIBLE_STATUSES: EventStatus[] = ["planned", "postponed"];
+
+function buildCalendarTooltip(event: EventResponse): string {
+  const parts: string[] = [];
+
+  if (event.start_time) {
+    const timeRange = event.end_time
+      ? `${event.start_time.slice(0, 5)}-${event.end_time.slice(0, 5)}`
+      : event.start_time.slice(0, 5);
+    parts.push(timeRange);
+  }
+
+  parts.push(ACTIVITY_LABELS[event.activity_type]);
+
+  if (event.respondent_name) {
+    parts.push(event.respondent_name);
+  }
+
+  if (event.content) {
+    parts.push(event.content);
+  }
+
+  return parts.join(" • ");
+}
+
+function mapToCalendarEvents(events: EventResponse[]): EventInput[] {
+  return events
+    .filter((e) => CALENDAR_VISIBLE_STATUSES.includes(e.status))
+    .map((e) => {
+      const title = ACTIVITY_LABELS[e.activity_type];
+
+      let start = e.date;
+      let end: string | undefined;
+
+      if (e.start_time) {
+        start = `${e.date}T${e.start_time}`;
+      }
+      if (e.end_time) {
+        end = `${e.date}T${e.end_time}`;
+      }
+
+      return {
+        id: e.id,
+        title,
+        start,
+        end,
+        classNames: ["calendar-event", `calendar-event--${e.status}`],
+        allDay: !e.start_time,
+        extendedProps: {
+          eventId: e.id,
+          tooltipText: buildCalendarTooltip(e),
+          statusColor: EVENT_STATUS_CALENDAR_COLORS[e.status],
+        },
+      };
+    });
 }
 
 const Calendar: React.FC = () => {
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
-    null
-  );
-  const [eventTitle, setEventTitle] = useState("");
-  const [eventStartDate, setEventStartDate] = useState("");
-  const [eventEndDate, setEventEndDate] = useState("");
-  const [eventLevel, setEventLevel] = useState("");
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const calendarRef = useRef<FullCalendar>(null);
-  const { isOpen, openModal, closeModal } = useModal();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [events, setEvents] = useState<EventInput[]>([]);
+  const [selectedDate, setSelectedDate] = useState("");
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const createModal = useModal();
+  const lastDatesArg = useRef<DatesSetArg | null>(null);
 
-  const calendarsEvents = {
-    Danger: "danger",
-    Success: "success",
-    Primary: "primary",
-    Warning: "warning",
-  };
-
-  useEffect(() => {
-    // Initialize with some events
-    setEvents([
-      {
-        id: "1",
-        title: "Event Conf.",
-        start: new Date().toISOString().split("T")[0],
-        extendedProps: { calendar: "Danger" },
-      },
-      {
-        id: "2",
-        title: "Meeting",
-        start: new Date(Date.now() + 86400000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Success" },
-      },
-      {
-        id: "3",
-        title: "Workshop",
-        start: new Date(Date.now() + 172800000).toISOString().split("T")[0],
-        end: new Date(Date.now() + 259200000).toISOString().split("T")[0],
-        extendedProps: { calendar: "Primary" },
-      },
-    ]);
+  const fetchEvents = useCallback(async (arg: DatesSetArg) => {
+    lastDatesArg.current = arg;
+    try {
+      const data = await getEvents({
+        page: 1,
+        page_size: 500,
+        date__gte: arg.startStr.split("T")[0],
+        date__lte: arg.endStr.split("T")[0],
+      });
+      setEvents(mapToCalendarEvents(data.items));
+      setFetchError(null);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Не вдалося завантажити події");
+    }
   }, []);
 
-  const handleDateSelect = (selectInfo: DateSelectArg) => {
-    resetModalFields();
-    setEventStartDate(selectInfo.startStr);
-    setEventEndDate(selectInfo.endStr || selectInfo.startStr);
-    openModal();
-  };
+  const handleDateSelect = useCallback(
+    (selectInfo: DateSelectArg) => {
+      setSelectedDate(selectInfo.startStr.split("T")[0]);
+      createModal.openModal();
+    },
+    [createModal],
+  );
 
-  const handleEventClick = (clickInfo: EventClickArg) => {
-    const event = clickInfo.event;
-    setSelectedEvent(event as unknown as CalendarEvent);
-    setEventTitle(event.title);
-    setEventStartDate(event.start?.toISOString().split("T")[0] || "");
-    setEventEndDate(event.end?.toISOString().split("T")[0] || "");
-    setEventLevel(event.extendedProps.calendar);
-    openModal();
-  };
+  const handleEventClick = useCallback(
+    (clickInfo: EventClickArg) => {
+      const eventId = clickInfo.event.extendedProps.eventId;
+      if (eventId) navigate(`/events/${eventId}`);
+    },
+    [navigate],
+  );
 
-  const handleAddOrUpdateEvent = () => {
-    if (selectedEvent) {
-      // Update existing event
-      setEvents((prevEvents) =>
-        prevEvents.map((event) =>
-          event.id === selectedEvent.id
-            ? {
-                ...event,
-                title: eventTitle,
-                start: eventStartDate,
-                end: eventEndDate,
-                extendedProps: { calendar: eventLevel },
-              }
-            : event
-        )
-      );
-    } else {
-      // Add new event
-      const newEvent: CalendarEvent = {
-        id: Date.now().toString(),
-        title: eventTitle,
-        start: eventStartDate,
-        end: eventEndDate,
-        allDay: true,
-        extendedProps: { calendar: eventLevel },
-      };
-      setEvents((prevEvents) => [...prevEvents, newEvent]);
-    }
-    closeModal();
-    resetModalFields();
-  };
-
-  const resetModalFields = () => {
-    setEventTitle("");
-    setEventStartDate("");
-    setEventEndDate("");
-    setEventLevel("");
-    setSelectedEvent(null);
-  };
+  const handleCreated = useCallback(() => {
+    if (lastDatesArg.current) fetchEvents(lastDatesArg.current);
+  }, [fetchEvents]);
 
   return (
     <>
-      <PageMeta
-        title="React.js Calendar Dashboard | TailAdmin - Next.js Admin Dashboard Template"
-        description="This is React.js Calendar Dashboard page for TailAdmin - React.js Tailwind CSS Admin Dashboard Template"
-      />
-      <div className="rounded-2xl border  border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+      <PageMeta title="Календар | АРМ Психолога" description="" />
+      {fetchError && (
+        <div className="mb-4 rounded-lg border border-error-300 bg-error-50 px-4 py-3 text-sm text-error-600 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400">
+          Помилка завантаження подій: {fetchError}
+        </div>
+      )}
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="custom-calendar">
           <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            plugins={[dayGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
             headerToolbar={{
-              left: "prev,next addEventButton",
+              left: "prev,next today",
               center: "title",
-              right: "dayGridMonth,timeGridWeek,timeGridDay",
+              right: "",
             }}
             events={events}
+            datesSet={fetchEvents}
+            fixedWeekCount={false}
+            showNonCurrentDates={false}
+            height="auto"
+            eventTimeFormat={{
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }}
             selectable={true}
             select={handleDateSelect}
             eventClick={handleEventClick}
+            locale="uk"
             eventContent={renderEventContent}
-            customButtons={{
-              addEventButton: {
-                text: "Add Event +",
-                click: openModal,
-              },
-            }}
           />
         </div>
-        <Modal
-          isOpen={isOpen}
-          onClose={closeModal}
-          className="max-w-[700px] p-6 lg:p-10"
-        >
-          <div className="flex flex-col px-2 overflow-y-auto custom-scrollbar">
-            <div>
-              <h5 className="mb-2 font-semibold text-gray-800 modal-title text-theme-xl dark:text-white/90 lg:text-2xl">
-                {selectedEvent ? "Edit Event" : "Add Event"}
-              </h5>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Plan your next big moment: schedule or edit an event to stay on
-                track
-              </p>
-            </div>
-            <div className="mt-8">
-              <div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                    Event Title
-                  </label>
-                  <input
-                    id="event-title"
-                    type="text"
-                    value={eventTitle}
-                    onChange={(e) => setEventTitle(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-              <div className="mt-6">
-                <label className="block mb-4 text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Event Color
-                </label>
-                <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-                  {Object.entries(calendarsEvents).map(([key, value]) => (
-                    <div key={key} className="n-chk">
-                      <div
-                        className={`form-check form-check-${value} form-check-inline`}
-                      >
-                        <label
-                          className="flex items-center text-sm text-gray-700 form-check-label dark:text-gray-400"
-                          htmlFor={`modal${key}`}
-                        >
-                          <span className="relative">
-                            <input
-                              className="sr-only form-check-input"
-                              type="radio"
-                              name="event-level"
-                              value={key}
-                              id={`modal${key}`}
-                              checked={eventLevel === key}
-                              onChange={() => setEventLevel(key)}
-                            />
-                            <span className="flex items-center justify-center w-5 h-5 mr-2 border border-gray-300 rounded-full box dark:border-gray-700">
-                              <span
-                                className={`h-2 w-2 rounded-full bg-white ${
-                                  eventLevel === key ? "block" : "hidden"
-                                }`}
-                              ></span>
-                            </span>
-                          </span>
-                          {key}
-                        </label>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Enter Start Date
-                </label>
-                <div className="relative">
-                  <input
-                    id="event-start-date"
-                    type="date"
-                    value={eventStartDate}
-                    onChange={(e) => setEventStartDate(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">
-                  Enter End Date
-                </label>
-                <div className="relative">
-                  <input
-                    id="event-end-date"
-                    type="date"
-                    value={eventEndDate}
-                    onChange={(e) => setEventEndDate(e.target.value)}
-                    className="dark:bg-dark-900 h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent bg-none px-4 py-2.5 pl-4 pr-11 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 mt-6 modal-footer sm:justify-end">
-              <button
-                onClick={closeModal}
-                type="button"
-                className="flex w-full justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.03] sm:w-auto"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleAddOrUpdateEvent}
-                type="button"
-                className="btn btn-success btn-update-event flex w-full justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 sm:w-auto"
-              >
-                {selectedEvent ? "Update Changes" : "Add Event"}
-              </button>
-            </div>
-          </div>
-        </Modal>
       </div>
+
+      {user && (
+        <QuickCreateEventModal
+          isOpen={createModal.isOpen}
+          onClose={createModal.closeModal}
+          onCreated={handleCreated}
+          psychologistId={user.id}
+          defaultDate={selectedDate}
+        />
+      )}
     </>
   );
 };
 
-const renderEventContent = (eventInfo: any) => {
-  const colorClass = `fc-bg-${eventInfo.event.extendedProps.calendar.toLowerCase()}`;
+const renderEventContent = (eventInfo: EventContentArg) => {
   return (
     <div
-      className={`event-fc-color flex fc-event-main ${colorClass} p-1 rounded-sm`}
+      className="calendar-month-event"
+      title={eventInfo.event.extendedProps.tooltipText as string | undefined}
     >
-      <div className="fc-daygrid-event-dot"></div>
-      <div className="fc-event-time">{eventInfo.timeText}</div>
-      <div className="fc-event-title">{eventInfo.event.title}</div>
+      <span
+        className="calendar-month-event__dot"
+        style={{
+          backgroundColor: eventInfo.event.extendedProps.statusColor as string,
+        }}
+      />
+      {eventInfo.timeText && (
+        <span className="calendar-month-event__time">{eventInfo.timeText}</span>
+      )}
+      <span className="calendar-month-event__title">
+        {eventInfo.event.title}
+      </span>
     </div>
   );
 };
+
+// ─── Quick Create Event Modal ────────────────────────────────────
+
+function QuickCreateEventModal({
+  isOpen,
+  onClose,
+  onCreated,
+  psychologistId,
+  defaultDate,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  psychologistId: string;
+  defaultDate: string;
+}) {
+  const [date, setDate] = useState(defaultDate);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [activityType, setActivityType] = useState<ActivityType>("ppv");
+  const [content, setContent] = useState("");
+  const [respondentName, setRespondentName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Sync defaultDate when modal opens
+  if (isOpen && date !== defaultDate && defaultDate) {
+    setDate(defaultDate);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!date) return;
+    setSaving(true);
+    setError("");
+    try {
+      await createEvent({
+        date,
+        start_time: startTime || undefined,
+        end_time: endTime || undefined,
+        activity_type: activityType,
+        content: content.trim() || undefined,
+        respondent_name: respondentName.trim() || undefined,
+        status: "planned",
+        psychologist_id: psychologistId,
+      });
+      setStartTime("");
+      setEndTime("");
+      setContent("");
+      setRespondentName("");
+      onClose();
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Помилка створення");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} className="max-w-lg p-6 lg:p-8">
+      <h3 className="mb-6 text-lg font-semibold text-gray-800 dark:text-white/90">
+        Нова подія
+      </h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="rounded-lg border border-error-300 bg-error-50 p-3 text-sm text-error-600 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400">
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Дата</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              required
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Початок</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Кінець</label>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Вид діяльності</label>
+          <select
+            value={activityType}
+            onChange={(e) => setActivityType(e.target.value as ActivityType)}
+            className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+          >
+            {(Object.keys(ACTIVITY_LABELS) as ActivityType[]).map((k) => (
+              <option key={k} value={k}>{ACTIVITY_LABELS[k]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Зміст</label>
+          <input
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Опис події"
+            className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+          />
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400">Респондент</label>
+          <input
+            value={respondentName}
+            onChange={(e) => setRespondentName(e.target.value)}
+            placeholder="ПІБ"
+            className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/20"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button size="sm" variant="outline" onClick={onClose}>Скасувати</Button>
+          <Button size="sm" type="submit" disabled={saving || !date}>
+            {saving ? "Створення..." : "Створити"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 export default Calendar;

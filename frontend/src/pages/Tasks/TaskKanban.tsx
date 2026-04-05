@@ -1,64 +1,84 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import PageMeta from "../../components/common/PageMeta";
 import PageBreadCrumb from "../../components/common/PageBreadCrumb";
-import { mockTasks } from "../../data/mockTasks";
+import LoadingSpinner from "../../components/common/LoadingSpinner";
+import ErrorAlert from "../../components/common/ErrorAlert";
+import { getTasks, updateTask } from "../../api/tasks";
+import { useApi } from "../../hooks/useApi";
+import type { Task, TaskStatus } from "../../types/task";
 import {
-  Task,
-  TaskStatus,
   STATUS_LABELS,
   STATUS_COUNT_COLORS,
   PRIORITY_COLORS,
   PRIORITY_LABELS,
 } from "../../types/task";
-import { CalenderIcon, ChatIcon } from "../../icons";
+import { CalenderIcon } from "../../icons";
 
 const ITEM_TYPE = "TASK";
 
+// "assigned" and "revision_requested" are merged into "created" (To Do) visually
 const COLUMNS: TaskStatus[] = [
   "created",
-  "assigned",
   "in_progress",
   "under_review",
   "completed",
 ];
 
-// ─── Tabs (same style as list view) ──────────────────────────────
-
-type TabFilter = "all" | TaskStatus;
-
-const TABS: { key: TabFilter; label: string }[] = [
-  { key: "all", label: "All Tasks" },
-  { key: "created", label: "To Do" },
-  { key: "in_progress", label: "In Progress" },
-  { key: "completed", label: "Completed" },
-];
-
-// ─── Main page ───────────────────────────────────────────────────
+const COLUMN_LABELS: Record<string, string> = {
+  created: "До виконання",
+  in_progress: "В роботі",
+  under_review: "На перевірці",
+  completed: "Виконано",
+};
 
 export default function TaskKanban() {
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
-  const [activeTab, setActiveTab] = useState<TabFilter>("all");
-
-  const moveTask = useCallback(
-    (taskId: string, newStatus: TaskStatus) => {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-      );
-    },
-    []
+  const { data, isLoading, error, refetch } = useApi(
+    () => getTasks({ page: 1, page_size: 200 }),
+    [],
   );
 
-  const visibleColumns =
-    activeTab === "all"
-      ? COLUMNS
-      : COLUMNS.filter((c) => c === activeTab);
+  // Local override for optimistic drag-drop
+  const [overrides, setOverrides] = useState<Record<string, TaskStatus>>({});
+  const [moveError, setMoveError] = useState<string | null>(null);
 
-  const countFor = (key: TabFilter) =>
-    key === "all"
-      ? tasks.length
-      : tasks.filter((t) => t.status === key).length;
+  const tasks = (data?.items ?? []).map((t) => {
+    const s = overrides[t.id] ?? t.status;
+    // assigned and revision_requested are displayed in the "created" (To Do) column
+    const displayStatus: TaskStatus =
+      s === "assigned" || s === "revision_requested" ? "created" : s;
+    return { ...t, status: displayStatus };
+  });
+
+  const moveTask = useCallback(
+    async (taskId: string, newStatus: TaskStatus) => {
+      // Optimistic update
+      setOverrides((prev) => ({ ...prev, [taskId]: newStatus }));
+
+      try {
+        await updateTask(taskId, { status: newStatus });
+        // Clear override before refetch so real data from server wins
+        setOverrides((prev) => {
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+        refetch();
+      } catch (err) {
+        // Revert optimistic update on error
+        setOverrides((prev) => {
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+        setMoveError(err instanceof Error ? err.message : "Не вдалося змінити статус");
+        setTimeout(() => setMoveError(null), 4000);
+      }
+    },
+    [refetch],
+  );
 
   return (
     <>
@@ -67,73 +87,45 @@ export default function TaskKanban() {
 
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         {/* Header */}
-        <div className="flex flex-col gap-4 border-b border-gray-200 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
-          {/* Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-            {TABS.map((tab) => {
-              const count = countFor(tab.key);
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-400"
-                      : "text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/5"
-                  }`}
-                >
-                  {tab.label}
-                  <span
-                    className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-medium ${
-                      isActive
-                        ? "bg-brand-500 text-white"
-                        : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Add button */}
-          <button className="flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
-            Add New Task
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M8 3.33334V12.6667M3.33334 8H12.6667"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5 dark:border-gray-800">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">
+            Kanban
+          </h2>
         </div>
 
-        {/* Board */}
-        <DndProvider backend={HTML5Backend}>
-          <div className="overflow-x-auto p-6 custom-scrollbar">
-            <div className="flex gap-6" style={{ minWidth: visibleColumns.length * 320 }}>
-              {visibleColumns.map((status) => (
-                <KanbanColumn
-                  key={status}
-                  status={status}
-                  tasks={tasks.filter((t) => t.status === status)}
-                  onDrop={moveTask}
-                />
-              ))}
-            </div>
+        {/* Move error toast */}
+        {moveError && (
+          <div className="mx-6 mt-4 rounded-lg border border-error-300 bg-error-50 px-4 py-3 text-sm text-error-600 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400">
+            {moveError}
           </div>
-        </DndProvider>
+        )}
+
+        {/* Content */}
+        {isLoading ? (
+          <LoadingSpinner />
+        ) : error ? (
+          <div className="p-6">
+            <ErrorAlert message={error} onRetry={refetch} />
+          </div>
+        ) : (
+          <DndProvider backend={HTML5Backend}>
+            <div className="overflow-x-auto p-6 custom-scrollbar">
+              <div
+                className="flex gap-6"
+                style={{ minWidth: COLUMNS.length * 320 }}
+              >
+                {COLUMNS.map((status) => (
+                  <KanbanColumn
+                    key={status}
+                    status={status}
+                    tasks={tasks.filter((t) => t.status === status)}
+                    onDrop={moveTask}
+                  />
+                ))}
+              </div>
+            </div>
+          </DndProvider>
+        )}
       </div>
     </>
   );
@@ -150,8 +142,11 @@ function KanbanColumn({
   tasks: Task[];
   onDrop: (taskId: string, newStatus: TaskStatus) => void;
 }) {
+  const canAcceptDrop = true; // all columns accept drops; backend actions are mapped in moveTask
+
   const [{ isOver }, drop] = useDrop({
     accept: ITEM_TYPE,
+    canDrop: () => canAcceptDrop,
     drop: (item: { id: string }) => onDrop(item.id, status),
     collect: (monitor) => ({ isOver: monitor.isOver() }),
   });
@@ -164,24 +159,15 @@ function KanbanColumn({
       }`}
     >
       {/* Column header */}
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
-            {STATUS_LABELS[status]}
-          </h3>
-          <span
-            className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-medium ${STATUS_COUNT_COLORS[status]}`}
-          >
-            {tasks.length}
-          </span>
-        </div>
-        <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
-            <circle cx="4" cy="10" r="1.5" />
-            <circle cx="10" cy="10" r="1.5" />
-            <circle cx="16" cy="10" r="1.5" />
-          </svg>
-        </button>
+      <div className="mb-4 flex items-center gap-2.5">
+        <h3 className="text-base font-semibold text-gray-800 dark:text-white/90">
+          {COLUMN_LABELS[status] ?? STATUS_LABELS[status]}
+        </h3>
+        <span
+          className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-medium ${STATUS_COUNT_COLORS[status]}`}
+        >
+          {tasks.length}
+        </span>
       </div>
 
       {/* Cards */}
@@ -189,6 +175,11 @@ function KanbanColumn({
         {tasks.map((task) => (
           <KanbanCard key={task.id} task={task} />
         ))}
+        {tasks.length === 0 && (
+          <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-400 dark:border-gray-800 dark:text-gray-500">
+            Немає задач
+          </div>
+        )}
       </div>
     </div>
   );
@@ -196,7 +187,17 @@ function KanbanColumn({
 
 // ─── Card ────────────────────────────────────────────────────────
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
 function KanbanCard({ task }: { task: Task }) {
+  const navigate = useNavigate();
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const [{ isDragging }, drag] = useDrag({
     type: ITEM_TYPE,
     item: { id: task.id },
@@ -206,21 +207,33 @@ function KanbanCard({ task }: { task: Task }) {
   return (
     <div
       ref={drag as unknown as React.Ref<HTMLDivElement>}
+      onMouseDown={(e) => { mouseDownPos.current = { x: e.clientX, y: e.clientY }; }}
+      onMouseUp={(e) => {
+        if (!mouseDownPos.current) return;
+        const dx = Math.abs(e.clientX - mouseDownPos.current.x);
+        const dy = Math.abs(e.clientY - mouseDownPos.current.y);
+        mouseDownPos.current = null;
+        if (dx < 5 && dy < 5) navigate(`/tasks/${task.id}`);
+      }}
+      onMouseLeave={() => { mouseDownPos.current = null; }}
       className={`cursor-grab rounded-xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-theme-sm dark:border-gray-800 dark:bg-white/[0.03] ${
-        isDragging ? "opacity-50 shadow-theme-md" : ""
+        isDragging ? "opacity-50 shadow-theme-md cursor-grabbing" : ""
       }`}
     >
-      {/* Title + avatar */}
+      {/* Title + assignee */}
       <div className="mb-3 flex items-start justify-between gap-3">
         <h4 className="text-sm font-medium text-gray-800 dark:text-white/90 leading-snug">
           {task.title}
         </h4>
-        {task.assignee && (
-          <img
-            src={task.assignee.avatar}
-            alt={task.assignee.name}
-            className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
-          />
+        {task.assignees.length > 0 && (
+          <div
+            className="h-8 w-8 flex-shrink-0 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+            title={task.assignees[0].user.username}
+          >
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {task.assignees[0].user.username[0]?.toUpperCase()}
+            </span>
+          </div>
         )}
       </div>
 
@@ -233,21 +246,22 @@ function KanbanCard({ task }: { task: Task }) {
 
       {/* Meta row */}
       <div className="flex items-center gap-3 flex-wrap">
-        {task.dueDate && (
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            PRIORITY_COLORS[task.priority]
+          }`}
+        >
+          {PRIORITY_LABELS[task.priority]}
+        </span>
+
+        {task.deadline && (
           <div className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
             <CalenderIcon className="h-4 w-4" />
-            {task.dueDate}
+            {formatDate(task.deadline)}
           </div>
         )}
 
-        {task.commentsCount > 0 && (
-          <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-            <ChatIcon className="h-4 w-4" />
-            {task.commentsCount}
-          </div>
-        )}
-
-        {task.subtasksCount > 0 && (
+        {task.subtasks.length > 0 && (
           <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
             <svg
               width="16"
@@ -260,24 +274,10 @@ function KanbanCard({ task }: { task: Task }) {
             >
               <path d="M6 4l4 4-4 4" />
             </svg>
-            {task.subtasksCount}
+            {task.subtasks.length}
           </div>
         )}
       </div>
-
-      {/* Tags */}
-      {task.tags.length > 0 && (
-        <div className="mt-3 flex gap-2">
-          {task.tags.map((tag) => (
-            <span
-              key={tag}
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${PRIORITY_COLORS[task.priority]}`}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

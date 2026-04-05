@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from uuid import UUID
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.api.modules.users.enums import UserRole
@@ -108,3 +108,19 @@ class AuthenticatePsychologist(AuthenticateUser):
 
 class AuthenticateRespondent(AuthenticateUser):
     required_role = (UserRole.admin, UserRole.psychologist, UserRole.respondent)
+
+
+class AuthenticateSSE(AuthenticateUser):
+    """Reads token from ?token= query param for SSE endpoints (EventSource doesn't support headers)."""
+
+    required_role = (UserRole.admin, UserRole.psychologist)
+
+    async def __call__(
+        self,
+        request: Request,
+        token: str = Query(..., alias="token"),
+    ) -> User:
+        container = request.state.dishka_container
+        uow: UnitOfWork = await container.get(UnitOfWork)
+        config: Config = await container.get(Config)
+        return await self.get_current_user(uow=uow, token=token, config=config)

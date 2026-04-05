@@ -4,6 +4,7 @@ from fastapi import APIRouter
 def register_routers(router: APIRouter) -> None:
     from app.api.modules.auth.routes import router as auth_router
     from app.api.modules.events.routes import router as events_router
+    from app.api.modules.notifications.routes import router as notifications_router
     from app.api.modules.tasks.routes import (
         admin_router as tasks_admin_router,
         common_router as tasks_common_router,
@@ -21,3 +22,4 @@ def register_routers(router: APIRouter) -> None:
     router.include_router(tasks_psychologist_router, prefix="/tasks", tags=["Tasks - Psychologist"])
     router.include_router(tasks_common_router, prefix="/tasks", tags=["Tasks - Common"])
     router.include_router(events_router, prefix="/events", tags=["Events"])
+    router.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])

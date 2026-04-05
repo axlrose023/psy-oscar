@@ -135,6 +135,7 @@ class EventsPaginationParams(PaginationParams):
     status: EventStatus | None = None
     psychologist_id: UUID | None = None
     respondent_id: UUID | None = None
+    task_id: UUID | None = None
     is_archived: bool = False
 
 
