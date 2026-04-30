@@ -3592,21 +3592,6 @@ body[data-theme="gov"] {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 1px;
 }
-[data-theme="gov"] .k-drag-handle {
-  width: 26px;
-  height: 26px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: #98A2B3;
-  background: transparent;
-  font-family: var(--sans);
-  font-size: 16px;
-}
-[data-theme="gov"] .k-drag-handle:hover {
-  color: #475467;
-  background: #F2F4F7;
-  border-color: #E1E7F0;
-}
 [data-theme="gov"] .k-pri {
   font-family: var(--sans);
   font-size: 11px;

@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { tasks as tasksApi } from "../api/index.js";
 import { TASK_PRIORITIES, TASK_STATUSES } from "../data.js";
-import ConfirmDialog from "../components/ConfirmDialog.jsx";
 
 const KANBAN_COLS = [
   { id: "created",            label: "Створено",        color: "#6B6B5C" },
@@ -62,9 +61,8 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
   const [taskList, setTaskList] = useState(null);
   const [dragging, setDragging] = useState(null);
   const [listPage, setListPage] = useState(1);
-  const [revisionDrop, setRevisionDrop] = useState(null);
-  const [revisionComment, setRevisionComment] = useState("");
-  const [revisionSaving, setRevisionSaving] = useState(false);
+  const [revisionModal, setRevisionModal] = useState(null); // { taskId }
+  const [revisionText, setRevisionText]   = useState("");
 
   const loadTasks = useCallback(async () => {
     try {
@@ -112,11 +110,6 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
   async function handleDrop(colId, taskId) {
     const task = allTasks.find(t=>t.id===taskId);
     if (!canDropTask(task, colId, isAdmin, currentUser)) return;
-    if (colId === "revision_requested") {
-      setRevisionDrop(task);
-      setRevisionComment("");
-      return;
-    }
     setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:colId}:t));
     try {
       let updated;
@@ -128,23 +121,27 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
           : await tasksApi.submit(taskId);
       }
       else if (colId==="completed") updated = await tasksApi.approve(taskId);
+      else if (colId==="revision_requested") {
+        // revert optimistic update and show modal
+        setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:task.status}:t));
+        setRevisionModal({ taskId });
+        setRevisionText("");
+        return;
+      }
       if (updated) setTaskList(prev=>prev.map(t=>t.id===taskId?updated:t));
     } catch { loadTasks(); }
   }
 
-  async function confirmRevisionDrop() {
-    if (!revisionDrop || !revisionComment.trim()) return;
-    setRevisionSaving(true);
+  async function confirmRevision() {
+    if (!revisionModal || !revisionText.trim()) return;
+    const { taskId } = revisionModal;
+    setRevisionModal(null);
+    setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:"revision_requested"}:t));
     try {
-      const updated = await tasksApi.requestRevision(revisionDrop.id, revisionComment.trim());
-      setTaskList(prev=>prev?.map(t=>t.id===revisionDrop.id?updated:t) || prev);
-      setRevisionDrop(null);
-      setRevisionComment("");
-    } catch {
-      loadTasks();
-    } finally {
-      setRevisionSaving(false);
-    }
+      const updated = await tasksApi.requestRevision(taskId, revisionText.trim());
+      if (updated) setTaskList(prev=>prev.map(t=>t.id===taskId?updated:t));
+    } catch { loadTasks(); }
+    setRevisionText("");
   }
 
   return (
@@ -199,31 +196,23 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
           </>
         )}
       </div>
-      {revisionDrop && (
-        <ConfirmDialog
-          title="Повернути на доопрацювання"
-          confirmText="Повернути"
-          danger
-          disabled={revisionSaving || !revisionComment.trim()}
-          onCancel={() => {
-            if (revisionSaving) return;
-            setRevisionDrop(null);
-            setRevisionComment("");
-          }}
-          onConfirm={confirmRevisionDrop}
-        >
-          <label className="field">
-            <span className="field-label">Що потрібно виправити <span className="req">*</span></span>
-            <textarea
-              className="input textarea"
-              rows={4}
-              value={revisionComment}
-              onChange={(event) => setRevisionComment(event.target.value)}
-              placeholder="Наприклад: додати висновок, уточнити дату, виправити опис результату…"
-              autoFocus
-            />
-          </label>
-        </ConfirmDialog>
+
+      {revisionModal && (
+        <div className="confirm-overlay" onClick={() => setRevisionModal(null)}>
+          <div className="confirm-card" onClick={e=>e.stopPropagation()}>
+            <h3>Повернути на доопрацювання</h3>
+            <p style={{marginBottom:10,color:"var(--text-body)",fontSize:13}}>Вкажіть що саме потрібно виправити:</p>
+            <textarea className="input textarea" rows={4} autoFocus
+              style={{width:"100%",marginBottom:12,resize:"vertical"}}
+              value={revisionText} onChange={e=>setRevisionText(e.target.value)}
+              placeholder="Опишіть зауваження…"
+              onKeyDown={e=>{if(e.key==="Enter"&&(e.ctrlKey||e.metaKey))confirmRevision();}}/>
+            <div className="actions">
+              <button className="btn ghost" onClick={()=>setRevisionModal(null)}>Скасувати</button>
+              <button className="btn danger" disabled={!revisionText.trim()} onClick={confirmRevision}>Повернути</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -231,19 +220,16 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
 
 function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin, currentUser }) {
   const [dropTarget, setDropTarget] = useState(null);
-  const suppressClickRef = useRef(false);
   const draggingTask = tasks.find(t=>t.id===dragging);
 
   function handleDragStart(e, task) {
     setDragging(task.id);
-    suppressClickRef.current = true;
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", task.id);
   }
   function handleDragEnd() {
     setDragging(null);
     setDropTarget(null);
-    window.setTimeout(() => { suppressClickRef.current = false; }, 0);
   }
   function handleDragOver(e, colId) {
     if (!draggingTask || !canDropTask(draggingTask, colId, isAdmin, currentUser)) {
@@ -261,15 +247,11 @@ function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin
     setDragging(null);
     setDropTarget(null);
   }
-  function openTask(taskId) {
-    if (suppressClickRef.current) return;
-    onOpenTask(taskId);
-  }
 
   return (
     <div className="kanban-scroll">
       <div className="kanban-v2">
-        {KANBAN_COLS.map(col=>{
+        {KANBAN_COLS.filter(col => isAdmin || col.id !== "created").map(col=>{
           const colTasks = tasks.filter(t=>t.status===col.id);
           const isTarget = dropTarget===col.id;
           const canDrop = draggingTask ? canDropTask(draggingTask, col.id, isAdmin, currentUser) : true;
@@ -287,7 +269,7 @@ function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin
                 {colTasks.length===0 && <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--text-faint)",padding:"8px 0",textAlign:"center"}}>— немає —</div>}
                 {colTasks.map(t=>(
                   <KCard key={t.id} task={t}
-                    onOpen={openTask}
+                    onOpen={onOpenTask}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     isDragging={dragging===t.id}/>
@@ -313,25 +295,29 @@ function KCard({ task, onOpen, onDragStart, onDragEnd, isDragging }) {
 
   const assignees = task.assignees || [];
 
+  const downPosRef = useRef(null);
+  function handleMouseDown(e) {
+    if (e.button !== 0) return;
+    downPosRef.current = { x: e.clientX, y: e.clientY };
+  }
+  function handleMouseUp(e) {
+    if (e.button !== 0 || !downPosRef.current) return;
+    const dx = Math.abs(e.clientX - downPosRef.current.x);
+    const dy = Math.abs(e.clientY - downPosRef.current.y);
+    downPosRef.current = null;
+    if (dx < 5 && dy < 5) onOpen(task.id);
+  }
+
   return (
     <div className={"k-card pri-"+task.priority+(isDragging?" dragging":"")}
-      onClick={()=>onOpen(task.id)}>
+      draggable
+      onDragStart={e=>onDragStart(e,task)}
+      onDragEnd={onDragEnd}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}>
       <div className="k-card-meta">
         <span className="k-pri" style={{color:priColor,borderColor:priColor}}>{priLabel}</span>
         {overdue && <span className="k-overdue">ПРОСТР.</span>}
-        <button
-          type="button"
-          className="k-drag-handle"
-          draggable
-          title="Перетягнути"
-          aria-label="Перетягнути задачу"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-          onDragStart={e=>onDragStart(e,task)}
-          onDragEnd={onDragEnd}
-        >
-          ⋮⋮
-        </button>
         <span style={{marginLeft:"auto",fontFamily:"var(--mono)",fontSize:9,color:"var(--text-faint)"}}>
           #{task.id?.slice(0,6)||"—"}
         </span>
