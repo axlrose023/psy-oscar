@@ -105,7 +105,7 @@ export default function TasksPage({ isAdmin, onOpenTask, onNewTask }) {
         </div>
         <div className="page-actions">
           <div className="view-tabs">
-            <button className={"view-tab"+(view==="kanban"?" active":"")} onClick={()=>{setView("kanban");localStorage.setItem("tasks_view","kanban");}}>⊟ Kanban</button>
+            <button className={"view-tab"+(view==="kanban"?" active":"")} onClick={()=>{setView("kanban");localStorage.setItem("tasks_view","kanban");}}>⊟ Дошка</button>
             <button className={"view-tab"+(view==="list"?" active":"")} onClick={()=>{setView("list");localStorage.setItem("tasks_view","list");}}>☰ Список</button>
           </div>
           <button className="btn primary" onClick={onNewTask}>＋ Нова задача</button>
