@@ -6,7 +6,7 @@ from sqlalchemy import BinaryExpression, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.api.modules.events.models import Event, EventHistory
+from app.api.modules.events.models import Event, EventAssignee, EventHistory
 
 
 class EventGateway:
@@ -24,6 +24,7 @@ class EventGateway:
             .options(
                 joinedload(Event.psychologist),
                 joinedload(Event.created_by),
+                joinedload(Event.assignees).joinedload(EventAssignee.user),
             )
             .where(Event.id == event_id)
         )
@@ -41,6 +42,7 @@ class EventGateway:
             .options(
                 joinedload(Event.psychologist),
                 joinedload(Event.created_by),
+                joinedload(Event.assignees).joinedload(EventAssignee.user),
             )
             .filter(*filters)
             .order_by(Event.date.desc(), Event.start_time.desc())
@@ -67,7 +69,7 @@ class EventGateway:
             return False
 
         conditions = [
-            Event.psychologist_id == psychologist_id,
+            Event.assignees.any(EventAssignee.user_id == psychologist_id),
             Event.date == date,
             Event.start_time.isnot(None),
             Event.end_time.isnot(None),

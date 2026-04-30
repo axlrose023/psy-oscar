@@ -101,7 +101,7 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   const [showHistory, setShowHistory]   = useState(false);
 
   const [linkedEvents, setLinkedEvents]   = useState(null);
-  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsLoading] = useState(false);
   const [addEventMode, setAddEventMode]   = useState(null); // null | "pick" | "new"
   const [allEvents, setAllEvents]         = useState(null);
   const [allEventsLoading, setAllEventsLoading] = useState(false);
@@ -149,15 +149,6 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
     }, 0);
     return () => window.clearTimeout(timer);
   }, [isAdmin]);
-
-  function loadLinkedEvents() {
-    if (!taskId) return;
-    setEventsLoading(true);
-    eventsApi.list({ task_id: taskId, page_size: 50 })
-      .then((r) => setLinkedEvents(r.items || []))
-      .catch(() => setLinkedEvents([]))
-      .finally(() => setEventsLoading(false));
-  }
 
   function toggleHistory() {
     if (showHistory) { setShowHistory(false); return; }
@@ -425,9 +416,11 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
                                          cursor:"pointer", background:"var(--bg-head, #F5F3EE)", fontSize:13 }}
                                 onClick={async () => {
                                   try {
-                                    await eventsApi.update(ev.id, { task_id: taskId });
-                                    setLinkedEvents(prev => [...(prev || []), ev]);
-                                  } catch {}
+                                    const updated = await eventsApi.update(ev.id, { task_id: taskId });
+                                    setLinkedEvents(prev => [...(prev || []), updated]);
+                                  } catch (err) {
+                                    setError("Не вдалося прив'язати захід: " + err.message);
+                                  }
                                   setAddEventMode(null);
                                   setEventSearch("");
                                 }}>

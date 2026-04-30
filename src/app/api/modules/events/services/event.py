@@ -6,8 +6,7 @@ from fastapi import HTTPException, status
 from app.api.common.utils import build_filters
 from app.api.modules.events.enums import EventStatus
 from app.api.modules.events.manager import EventManager
-from app.api.modules.events.models import Event
-from app.api.modules.users.enums import UserRole
+from app.api.modules.events.models import Event, EventAssignee
 from app.api.modules.events.schema import (
     CancelEventRequest,
     CompleteEventRequest,
@@ -17,24 +16,75 @@ from app.api.modules.events.schema import (
     PostponeEventRequest,
     UpdateEventRequest,
 )
+from app.api.modules.users.enums import UserRole
 from app.api.modules.users.models import User
 
 
 class EventService(EventManager):
 
-    async def create_event(self, request: CreateEventRequest, current_user: User) -> Event:
-        if request.start_time and request.end_time:
+    async def _build_assignees(
+        self, requested_ids: list[UUID] | None, current_user: User
+    ) -> list[EventAssignee]:
+        if current_user.role != UserRole.admin:
+            if requested_ids and any(user_id != current_user.id for user_id in requested_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only create events for yourself",
+                )
+            requested_ids = [current_user.id]
+
+        requested_ids = requested_ids or [current_user.id]
+        unique_ids = list(dict.fromkeys(requested_ids))
+        assignees = []
+        for user_id in unique_ids:
+            user = await self.uow.users.get_by_id(user_id)
+            if user is None or user.role not in (UserRole.admin, UserRole.psychologist):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Psychologist {user_id} not found",
+                )
+            assignees.append(EventAssignee(user_id=user_id))
+        return assignees
+
+    def _request_assignee_ids(self, request: CreateEventRequest | UpdateEventRequest) -> list[UUID] | None:
+        if request.psychologist_ids is not None:
+            return request.psychologist_ids
+        if request.psychologist_id is not None:
+            return [request.psychologist_id]
+        return None
+
+    async def _ensure_no_overlap(
+        self,
+        assignee_ids: list[UUID],
+        date,
+        start_time,
+        end_time,
+        exclude_id: UUID | None = None,
+    ) -> None:
+        if not start_time or not end_time:
+            return
+        for assignee_id in assignee_ids:
             overlap = await self.uow.events.check_overlap(
-                psychologist_id=current_user.id,
-                date=request.date,
-                start_time=request.start_time,
-                end_time=request.end_time,
+                psychologist_id=assignee_id,
+                date=date,
+                start_time=start_time,
+                end_time=end_time,
+                exclude_id=exclude_id,
             )
             if overlap:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Time overlap with another event for this psychologist",
                 )
+
+    async def create_event(self, request: CreateEventRequest, current_user: User) -> Event:
+        assignees = await self._build_assignees(
+            self._request_assignee_ids(request), current_user
+        )
+        assignee_ids = [assignee.user_id for assignee in assignees]
+        await self._ensure_no_overlap(
+            assignee_ids, request.date, request.start_time, request.end_time
+        )
 
         if request.task_id:
             task = await self.uow.tasks.get_by_id(request.task_id)
@@ -61,9 +111,10 @@ class EventService(EventManager):
             execution_deadline=request.execution_deadline,
             status=request.status,
             result=request.result,
-            psychologist_id=current_user.id,
+            psychologist_id=assignee_ids[0],
             created_by_id=current_user.id,
             task_id=request.task_id,
+            assignees=assignees,
         )
         await self.uow.events.create(event)
         await self._record_history(event.id, current_user.id, "created", "Event created")
@@ -80,12 +131,15 @@ class EventService(EventManager):
         # Handle custom range filters
         date_gte = filter_data.pop("date__gte", None)
         date_lte = filter_data.pop("date__lte", None)
+        psychologist_id = filter_data.pop("psychologist_id", None)
 
         # Psychologists only see their own events
         if current_user.role != UserRole.admin:
-            filter_data["psychologist_id"] = current_user.id
+            psychologist_id = current_user.id
 
         filters = build_filters(Event, filter_data)
+        if psychologist_id:
+            filters.append(Event.assignees.any(EventAssignee.user_id == psychologist_id))
 
         if date_gte:
             filters.append(Event.date >= date_gte)
@@ -107,6 +161,7 @@ class EventService(EventManager):
 
     async def get_event(self, event_id: UUID, current_user: User) -> Event:
         event = await self._get_event_or_404(event_id)
+        self._ensure_can_modify(event, current_user)
         self._check_overdue(event)
         return event
 
@@ -119,30 +174,46 @@ class EventService(EventManager):
 
         data = request.model_dump(exclude_unset=True)
 
+        if "task_id" in data and data["task_id"] is not None:
+            task = await self.uow.tasks.get_by_id(data["task_id"])
+            if task is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Task not found",
+                )
+        assignees = None
+        if "psychologist_ids" in data or "psychologist_id" in data:
+            requested_ids = data.pop("psychologist_ids", None)
+            legacy_id = data.pop("psychologist_id", None)
+            assignees = await self._build_assignees(
+                requested_ids if requested_ids is not None else ([legacy_id] if legacy_id else None),
+                current_user,
+            )
+
         # Check overlap if time/date changed
         new_date = data.get("date", event.date)
         new_start = data.get("start_time", event.start_time)
         new_end = data.get("end_time", event.end_time)
-        if new_start and new_end:
-            overlap = await self.uow.events.check_overlap(
-                psychologist_id=event.psychologist_id,
-                date=new_date,
-                start_time=new_start,
-                end_time=new_end,
-                exclude_id=event.id,
-            )
-            if overlap:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Time overlap with another event for this psychologist",
-                )
+        assignee_ids = (
+            [assignee.user_id for assignee in assignees]
+            if assignees is not None
+            else [assignee.user_id for assignee in event.assignees] or [event.psychologist_id]
+        )
+        await self._ensure_no_overlap(
+            assignee_ids, new_date, new_start, new_end, exclude_id=event.id
+        )
 
         for key, value in data.items():
             setattr(event, key, value)
+        if assignees is not None:
+            event.assignees = assignees
+            event.psychologist_id = assignee_ids[0]
 
         await self._record_history(event.id, current_user.id, "updated", "Event updated")
+        event_id = event.id
         await self.uow.commit()
-        return await self.uow.events.get_by_id(event.id)
+        self.uow.session.expunge(event)
+        return await self.uow.events.get_by_id(event_id)
 
     async def complete_event(
         self, event_id: UUID, request: CompleteEventRequest, current_user: User
@@ -150,10 +221,15 @@ class EventService(EventManager):
         event = await self._get_event_or_404(event_id)
         self._ensure_can_modify(event, current_user)
         self._ensure_modifiable(event)
-        if event.status not in (EventStatus.DRAFT, EventStatus.PLANNED, EventStatus.OVERDUE):
+        if event.status not in (
+            EventStatus.DRAFT,
+            EventStatus.PLANNED,
+            EventStatus.POSTPONED,
+            EventStatus.OVERDUE,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Can only complete draft, planned, or overdue events",
+                detail="Can only complete draft, planned, postponed, or overdue events",
             )
 
         event.status = EventStatus.COMPLETED

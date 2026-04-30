@@ -82,6 +82,7 @@ export function TopBar({ currentUser, onLogout }) {
 const NAV_SECTIONS = [
   { key: "workplace",  label: "Робоче місце" },
   { key: "activities", label: "Заходи" },
+  { key: "future",     label: "Майбутні модулі" },
   { key: "service",    label: "Сервіс" },
 ];
 
@@ -111,13 +112,14 @@ export function Sidebar({ role }) {
             {secItems.map((it) => (
               <div
                 key={it.id}
-                className={`nav-item ${activeId === it.id ? "active" : ""}`}
-                onClick={() => ROUTE_MAP[it.id] ? navigate(ROUTE_MAP[it.id]) : undefined}
-                style={{ cursor: ROUTE_MAP[it.id] ? "pointer" : "default", opacity: ROUTE_MAP[it.id] ? 1 : 0.45 }}
+                className={`nav-item ${activeId === it.id ? "active" : ""} ${it.disabled ? "disabled" : ""}`}
+                onClick={() => !it.disabled && ROUTE_MAP[it.id] ? navigate(ROUTE_MAP[it.id]) : undefined}
+                aria-disabled={it.disabled ? "true" : undefined}
+                title={it.disabled ? "Буде доступно в наступних версіях" : undefined}
               >
                 <span className="nav-code">{it.code}</span>
                 <span className="nav-label">{it.label}</span>
-                {it.badge && <span className="nav-badge">{it.badge}</span>}
+                {(it.badge || it.disabled) && <span className="nav-badge">{it.badge || "пізніше"}</span>}
               </div>
             ))}
           </React.Fragment>

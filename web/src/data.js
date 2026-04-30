@@ -1,13 +1,18 @@
 export const NAV = [
   { id: "home",          section: "workplace",  code: "01", label: "Головна" },
-  { id: "planning",      section: "activities", code: "02", label: "Планування" },
-  { id: "tasks",         section: "activities", code: "03", label: "Задачі" },
-  { id: "psychologists", section: "service",    code: "04", label: "Психологи", adminOnly: true },
-  { id: "profile",       section: "service",    code: "05", label: "Профіль" },
+  { id: "psychologists", section: "workplace",  code: "02", label: "Психологи", adminOnly: true },
+  { id: "planning",      section: "activities", code: "03", label: "Планування" },
+  { id: "tasks",         section: "activities", code: "04", label: "Задачі" },
+  { id: "kps",           section: "future",     code: "05", label: "КПС", disabled: true },
+  { id: "testing",       section: "future",     code: "06", label: "Тестування", disabled: true },
+  { id: "reports",       section: "future",     code: "07", label: "Звіти", disabled: true, adminOnly: true },
+  { id: "library",       section: "future",     code: "08", label: "Бібліотека", disabled: true },
+  { id: "profile",       section: "service",    code: "09", label: "Профіль" },
+  { id: "settings",      section: "service",    code: "10", label: "Налаштування", disabled: true },
 ];
 
 export const ACTIVITY_TYPES = [
-  { code: "ППВ",   value: "ppv",        label: "ППВ",         full: "Психологічно-профілактична робота" },
+  { code: "ППВ",   value: "ppv",        label: "ППВ",         full: "Професійно-психологічний відбір" },
   { code: "ППсП",  value: "ppsp",       label: "ППсП",        full: "Психологічна підготовка" },
   { code: "АДАПТ", value: "adaptation", label: "Адаптація",   full: "Адаптаційна робота" },
   { code: "СКРІН", value: "screening",  label: "Скринінг",    full: "Скринінгове обстеження" },
@@ -38,10 +43,4 @@ export const TASK_STATUSES = [
   { value: "under_review",       label: "На перевірці",      color: "#7C3AED" },
   { value: "revision_requested", label: "На доопрацювання",  color: "#C0392B" },
   { value: "completed",          label: "Виконано",          color: "#2D7A3A" },
-];
-
-export const QUOTES = [
-  "«Першим обов'язком психолога є слухати — мовчанням та увагою лікувати те, чого слова ще не торкнулись.»\n— з методичних настанов УДО, розд. III",
-  "«Психологічна стійкість — не відсутність страху, а здатність діяти попри нього.»\n— з методичних настанов УДО",
-  "«Турбота про особовий склад починається з розуміння.»\n— принципи психологічного забезпечення УДО",
 ];

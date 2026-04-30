@@ -16,6 +16,11 @@ class EventUserResponse(BaseModel):
     username: str
 
 
+class EventAssigneeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user: EventUserResponse
+
+
 # --- Requests ---
 
 
@@ -36,6 +41,8 @@ class CreateEventRequest(BaseModel):
     execution_deadline: datetime.datetime | None = None
     status: EventStatus = EventStatus.DRAFT
     result: str | None = None
+    psychologist_id: UUID | None = None
+    psychologist_ids: list[UUID] | None = None
     task_id: UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
@@ -57,6 +64,9 @@ class UpdateEventRequest(BaseModel):
     control_source: str | None = Field(None, max_length=200)
     execution_deadline: datetime.datetime | None = None
     result: str | None = None
+    psychologist_id: UUID | None = None
+    psychologist_ids: list[UUID] | None = None
+    task_id: UUID | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -106,6 +116,7 @@ class EventResponse(BaseModel):
     result: str | None
     status_reason: str | None
     psychologist: EventUserResponse
+    assignees: list[EventAssigneeResponse] = []
     created_by: EventUserResponse
     task_id: UUID | None
     is_archived: bool

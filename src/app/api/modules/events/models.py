@@ -21,6 +21,22 @@ from app.api.modules.events.enums import ActivityType, EventStatus, PersonnelCat
 from app.database.base import Base, DateTimeMixin, UUID7IDMixin
 
 
+class EventAssignee(Base):
+    __tablename__ = "event_assignees"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("events.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    assigned_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.current_timestamp()
+    )
+
+    user: Mapped["User"] = relationship("User", lazy="joined")  # noqa: F821
+
+
 class Event(Base, UUID7IDMixin, DateTimeMixin):
     __tablename__ = "events"
 
@@ -101,9 +117,15 @@ class Event(Base, UUID7IDMixin, DateTimeMixin):
     task: Mapped["Task | None"] = relationship(  # noqa: F821
         "Task", foreign_keys=[task_id]
     )
+    assignees: Mapped[list["EventAssignee"]] = relationship(
+        cascade="all, delete-orphan", lazy="joined"
+    )
     history: Mapped[list["EventHistory"]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
     )
+
+    def is_assigned_to(self, user_id: uuid.UUID) -> bool:
+        return any(a.user_id == user_id for a in self.assignees)
 
 
 class EventHistory(Base):

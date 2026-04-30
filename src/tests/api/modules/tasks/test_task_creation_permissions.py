@@ -56,6 +56,45 @@ class TestTaskCreationPermissions:
         assert data["parent_task_id"] == parent.json()["id"]
         assert data["created_by"]["id"] == str(psychologist_user.id)
 
+    async def test_assignee_can_create_subtask_after_parent_is_completed(
+        self,
+        client: AsyncClient,
+        authenticated_user: dict,
+        authenticated_psychologist: dict,
+        psychologist_user,
+    ):
+        admin_headers = {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+        psych_headers = {"Authorization": f"Bearer {authenticated_psychologist['access_token']}"}
+
+        parent = await client.post(
+            "/tasks",
+            json={
+                "title": "Completed parent task",
+                "assigned_to_ids": [str(psychologist_user.id)],
+            },
+            headers=admin_headers,
+        )
+        assert parent.status_code == 201
+        parent_id = parent.json()["id"]
+
+        assert (await client.post(f"/tasks/{parent_id}/start", headers=psych_headers)).status_code == 200
+        assert (await client.post(f"/tasks/{parent_id}/submit", headers=psych_headers)).status_code == 200
+        assert (await client.post(f"/tasks/{parent_id}/approve", headers=admin_headers)).status_code == 200
+
+        resp = await client.post(
+            "/tasks",
+            json={
+                "title": "Follow-up subtask",
+                "parent_task_id": parent_id,
+            },
+            headers=psych_headers,
+        )
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["parent_task_id"] == parent_id
+        assert data["created_by"]["id"] == str(psychologist_user.id)
+
     async def test_psychologist_cannot_assign_new_task_to_others(
         self,
         client: AsyncClient,

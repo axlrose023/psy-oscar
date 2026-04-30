@@ -25,10 +25,10 @@ class EventManager:
     def _ensure_can_modify(self, event: Event, user: User) -> None:
         if user.role == UserRole.admin:
             return
-        if event.psychologist_id != user.id:
+        if event.psychologist_id != user.id and not event.is_assigned_to(user.id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only modify your own events",
+                detail="You can only access assigned events",
             )
 
     async def _record_history(

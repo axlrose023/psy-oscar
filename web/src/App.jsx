@@ -116,6 +116,7 @@ export default function App() {
           <ProtectedLayout currentUser={currentUser} onLogout={doLogout}>
             <TasksPage
               isAdmin={role === "admin"}
+              currentUser={currentUser}
               onOpenTask={(id) => setDrawer({ type:"task", id })}
               onNewTask={() => setDrawer({ type:"task" })}
             />
@@ -143,6 +144,8 @@ export default function App() {
       {drawer?.type === "event" && (
         <EventForm
           eventId={drawer.id}
+          isAdmin={role === "admin"}
+          currentUser={currentUser}
           openHistory={drawer.tab === "history"}
           linkedTaskId={drawer.linkedTaskId}
           onClose={() => setDrawer(null)}

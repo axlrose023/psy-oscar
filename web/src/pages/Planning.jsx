@@ -20,10 +20,6 @@ function formatDayLong(iso) {
   const d = new Date(iso+"T00:00:00");
   return ["неділя","понеділок","вівторок","середа","четвер","п'ятниця","субота"][d.getDay()];
 }
-function formatDayShort(iso) {
-  if (!iso) return "—";
-  return ["НД","ПН","ВТ","СР","ЧТ","ПТ","СБ"][new Date(iso+"T00:00:00").getDay()];
-}
 function dayMonthName(iso) {
   if (!iso) return "—";
   return ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"][new Date(iso+"T00:00:00").getMonth()];
@@ -61,7 +57,6 @@ export default function PlanningPage({ onOpenEvent, onNewEvent, isAdmin }) {
   const PAGE_SIZE = 100;
 
   const [evList, setEvList] = useState(null);
-  const [total, setTotal]   = useState(0);
   const [loadErr, setLoadErr] = useState(null);
 
   useEffect(() => {
@@ -80,7 +75,6 @@ export default function PlanningPage({ onOpenEvent, onNewEvent, isAdmin }) {
       const res = await eventsApi.list(params);
       const items = res.items||res;
       setEvList(items);
-      setTotal(res.total||items.length);
     } catch(err) {
       setLoadErr(err.message);
       setEvList([]);
@@ -245,9 +239,14 @@ function AgendaView({ events, onOpenEvent, todayIso, isAdmin }) {
             </div>
             {list.map(ev=>{
               const cat = getCategory(ev.personnel_category);
-              const psyName = ev.psychologist
-                ? [ev.psychologist.last_name, ev.psychologist.first_name?ev.psychologist.first_name[0]+".":null].filter(Boolean).join(" ")||ev.psychologist.username
-                : null;
+              const psyName = ev.assignees?.length
+                ? ev.assignees.map((a) => (
+                    [a.user.last_name, a.user.first_name ? a.user.first_name[0] + "." : null]
+                      .filter(Boolean).join(" ") || a.user.username
+                  )).join(", ")
+                : ev.psychologist
+                  ? [ev.psychologist.last_name, ev.psychologist.first_name?ev.psychologist.first_name[0]+".":null].filter(Boolean).join(" ")||ev.psychologist.username
+                  : null;
               return (
                 <div key={ev.id} className={"agenda-event"+(ev.is_controlled?" is-controlled":"")}
                      onClick={()=>onOpenEvent(ev.id)}>
@@ -278,125 +277,5 @@ function AgendaView({ events, onOpenEvent, todayIso, isAdmin }) {
         );
       })}
     </div>
-  );
-}
-
-// ── WEEK ──
-function WeekView({ events, onOpenEvent, todayIso }) {
-  const [weekStart, setWeekStart] = useState(()=>{
-    const d = new Date(); d.setHours(0,0,0,0);
-    const dow = d.getDay()||7; d.setDate(d.getDate()-(dow-1));
-    return d;
-  });
-
-  function moveWeek(delta) {
-    setWeekStart(prev=>{ const d=new Date(prev); d.setDate(d.getDate()+delta*7); return d; });
-  }
-
-  const days = Array.from({length:7},(_,i)=>{ const d=new Date(weekStart); d.setDate(d.getDate()+i); return d; });
-  const startHour=8, endHour=20, PX_PER_HOUR=38;
-  const hours = Array.from({length:endHour-startHour},(_,i)=>startHour+i);
-
-  function eventStyle(ev) {
-    const [sh,sm]=(ev.start_time||"08:00").split(":").map(Number);
-    const [eh,em]=(ev.end_time||"09:00").split(":").map(Number);
-    const top=((sh-startHour)*60+sm)/60*PX_PER_HOUR;
-    const height=Math.max(24,((eh-sh)*60+(em-sm))/60*PX_PER_HOUR);
-    return {top:`${top}px`,height:`${height}px`};
-  }
-
-  return (
-    <div style={{marginTop:12}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-        <button className="btn ghost small" onClick={()=>moveWeek(-1)}>◂ Тиждень</button>
-        <button className="btn ghost small" onClick={()=>setWeekStart(()=>{ const d=new Date();d.setHours(0,0,0,0);const dow=d.getDay()||7;d.setDate(d.getDate()-(dow-1));return d; })}>Сьогодні</button>
-        <button className="btn ghost small" onClick={()=>moveWeek(1)}>Тиждень ▸</button>
-        <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11,color:"var(--text-faint)"}}>
-          {formatShortDate(isoDate(days[0]))} — {formatShortDate(isoDate(days[6]))}
-        </span>
-      </div>
-      <div className="planning-week">
-        <div className="pw-head">
-          <div/>
-          {days.map((d,i)=>{
-            const iso=isoDate(d);
-            const cnt=events.filter(e=>e.date===iso).length;
-            return (
-              <div key={i} className={iso===todayIso?"is-today":""}>
-                <div className="pw-day-name">{formatDayShort(iso)}</div>
-                <div className="pw-day-num">{String(d.getDate()).padStart(2,"0")} {dayMonthName(iso)}</div>
-                <div style={{fontSize:10,color:"var(--text-faint)",marginTop:2}}>{cnt} зах.</div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="pw-body">
-          <div className="pw-hours">
-            {hours.map(h=><div key={h} className="pw-hour">{String(h).padStart(2,"0")}:00</div>)}
-          </div>
-          {days.map((d,i)=>{
-            const iso=isoDate(d);
-            const dayEvs=events.filter(e=>e.date===iso);
-            return (
-              <div key={i} className={"pw-col"+(iso===todayIso?" is-today":"")} style={{minHeight:hours.length*PX_PER_HOUR}}>
-                {dayEvs.map(ev=>{
-                  const a=getActivity(ev.activity_type);
-                  return (
-                    <div key={ev.id} className={"pw-event is-"+ev.status} style={eventStyle(ev)}
-                         onClick={()=>onOpenEvent(ev.id)} title={ev.content}>
-                      <div className="pe-time">{ev.start_time?.slice(0,5)}–{ev.end_time?.slice(0,5)} · {a.code}</div>
-                      <div className="pe-title">{ev.content}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── TABLE ──
-function TableView({ events, onOpenEvent, isAdmin }) {
-  const sorted = useMemo(()=>[...events].sort((a,b)=>(a.date+a.start_time).localeCompare(b.date+b.start_time)),[events]);
-  return (
-    <table className="tbl">
-      <thead><tr>
-        <th style={{width:90}}>Дата</th>
-        <th style={{width:100}}>Час</th>
-        <th style={{width:50}}>Вид</th>
-        <th>Зміст / Об'єкт</th>
-        <th style={{width:60}}>Кат.</th>
-        <th style={{width:80}}>План/Факт</th>
-        <th style={{width:120}}>Статус</th>
-        {isAdmin&&<th style={{width:120}}>Психолог</th>}
-      </tr></thead>
-      <tbody>
-        {sorted.length===0&&<tr><td colSpan={isAdmin?8:7} style={{textAlign:"center",padding:32,color:"var(--text-faint)",fontFamily:"var(--mono)",fontSize:11}}>— записів не знайдено —</td></tr>}
-        {sorted.map(ev=>{
-          const cat=getCategory(ev.personnel_category);
-          const psyName=ev.psychologist
-            ?[ev.psychologist.last_name,ev.psychologist.first_name?ev.psychologist.first_name[0]+".":null].filter(Boolean).join(" ")||ev.psychologist.username
-            :"—";
-          return (
-            <tr key={ev.id} className={ev.status==="overdue"?"is-overdue":""} onClick={()=>onOpenEvent(ev.id)}>
-              <td className="mono">{formatShortDate(ev.date)}</td>
-              <td className="mono dim">{ev.start_time?.slice(0,5)||"—"}{ev.end_time?"–"+ev.end_time.slice(0,5):""}</td>
-              <td><ActivityChip value={ev.activity_type}/></td>
-              <td>
-                <div>{ev.content||"—"}</div>
-                <div className="sub">{ev.target_unit||ev.respondent_name||""}{ev.is_controlled?" · КОНТР.":""}</div>
-              </td>
-              <td className="mono dim">{cat.short}</td>
-              <td className="num">{ev.planned_count??"—"} / {ev.actual_count??"—"}</td>
-              <td><StatusBadge status={ev.status}/></td>
-              {isAdmin&&<td className="dim">{psyName}</td>}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
   );
 }

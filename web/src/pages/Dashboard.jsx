@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { events, tasks, users } from "../api/index.js";
-import { ACTIVITY_TYPES, QUOTES, TASK_STATUSES } from "../data.js";
+import { ACTIVITY_TYPES, TASK_STATUSES } from "../data.js";
 import { StatusBadge } from "../components/StatusBadge.jsx";
 
 const DAY_MS = 86400000;
@@ -14,16 +14,6 @@ function formatDayLong(iso) {
   const days = ["неділя", "понеділок", "вівторок", "середа", "четвер", "п'ятниця", "субота"];
   return days[d.getDay()];
 }
-function formatDayShort(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso + "T00:00:00");
-  return ["НД","ПН","ВТ","СР","ЧТ","ПТ","СБ"][d.getDay()];
-}
-function dayMonthName(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso + "T00:00:00");
-  return ["січ","лют","бер","кві","тра","чер","лип","сер","вер","жов","лис","гру"][d.getMonth()];
-}
 function getActivity(value) {
   return ACTIVITY_TYPES.find((a) => a.value === value) || { code: "?", label: value, full: value };
 }
@@ -31,12 +21,6 @@ function shortName(u) {
   if (!u) return "—";
   return [u.last_name, u.first_name ? u.first_name[0] + "." : null, u.patronymic ? u.patronymic[0] + "." : null]
     .filter(Boolean).join(" ") || u.username;
-}
-function initials(u) {
-  if (!u) return "??";
-  const l = (u.last_name || "")[0] || "";
-  const f = (u.first_name || "")[0] || "";
-  return (l + f).toUpperCase() || (u.username || "??").slice(0, 2).toUpperCase();
 }
 function taskDeadlineShort(iso) {
   if (!iso) return "—";
@@ -62,8 +46,6 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
       }),
     };
   });
-  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
-
   const [data, setData] = useState({ todayEvents: null, upcomingEvents: null, stats: null, activeTasks: null, birthdays: null });
 
   useEffect(() => {
@@ -105,16 +87,6 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
   const activeTasks   = data.activeTasks;
   const birthdays     = data.birthdays;
   const stats         = data.stats;
-  const weekDays      = calendar.days;
-  const upcomingMap   = useMemo(() => {
-    const m = new Map();
-    (data.upcomingEvents || []).forEach(ev => {
-      if (!m.has(ev.date)) m.set(ev.date, []);
-      m.get(ev.date).push(ev);
-    });
-    return m;
-  }, [data.upcomingEvents]);
-
   const pct = (a, b) => b ? Math.round(a/b*100) : 0;
 
   return (
@@ -194,7 +166,6 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
 
       {/* Rail */}
       <aside className="dash-rail">
-        <QuoteCard quote={quote} />
         <NotesCard />
 
         {/* Дні народження */}
@@ -238,17 +209,6 @@ function Metric({ label, value, cap, tone }) {
 function ActivityChip({ value }) {
   const a = getActivity(value);
   return <span className="act-chip" title={a.full}>{a.code}</span>;
-}
-
-function QuoteCard({ quote }) {
-  const [text, ...rest] = (quote || "").split("\n");
-  return (
-    <div className="quote-card">
-      <div className="qc-label">Девіз дня</div>
-      <div className="qc-text">«{text}»</div>
-      {rest.length > 0 && <div className="qc-author">— {rest.join(" · ")}</div>}
-    </div>
-  );
 }
 
 function NotesCard() {

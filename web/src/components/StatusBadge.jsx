@@ -1,4 +1,3 @@
-import React from "react";
 import { TASK_STATUSES, TASK_PRIORITIES } from "../data.js";
 
 export function StatusBadge({ status, solid }) {
@@ -44,6 +43,3 @@ export function PriorityBadge({ priority }) {
     </span>
   );
 }
-
-export function taskStatusLabel(s) { return TASK_STATUSES.find((x) => x.value === s)?.label || s; }
-export function taskStatusColor(s) { return TASK_STATUSES.find((x) => x.value === s)?.color || "#9B9B90"; }

@@ -1,10 +1,10 @@
 import { useCallback, useState, useEffect } from "react";
-import { events as eventsApi } from "../api/index.js";
+import { events as eventsApi, users } from "../api/index.js";
 import { ACTIVITY_TYPES, PERSONNEL_CATEGORIES } from "../data.js";
 import { StatusBadge } from "./StatusBadge.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
-export default function EventForm({ eventId, onClose, onSaved, openHistory, linkedTaskId }) {
+export default function EventForm({ eventId, onClose, onSaved, openHistory, linkedTaskId, isAdmin, currentUser }) {
   const isNew = !eventId;
 
   const [loading, setLoading]   = useState(isNew ? false : true);
@@ -13,6 +13,7 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
   const [history, setHistory]   = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [eventData, setEventData] = useState(null);
+  const [psychologists, setPsychologists] = useState([]);
 
   const [date, setDate]             = useState(new Date().toISOString().slice(0, 10));
   const [startTime, setStartTime]   = useState("");
@@ -27,8 +28,19 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
   const [controlSource, setControlSource] = useState("");
   const [deadline, setDeadline]     = useState("");
   const [status, setStatus]         = useState("draft");
+  const [psychologistIds, setPsychologistIds] = useState(currentUser?.id ? [currentUser.id] : []);
   const [actionDialog, setActionDialog] = useState(null);
   const [actionForm, setActionForm] = useState({});
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const timer = window.setTimeout(() => {
+      users.list({ role: "psychologist", page_size: 200 })
+        .then((res) => setPsychologists(res.items || []))
+        .catch(() => setPsychologists([]));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isAdmin, currentUser?.id]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -61,12 +73,17 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
           setControlSource(e.control_source || "");
           setDeadline(e.execution_deadline ? e.execution_deadline.slice(0, 16) : "");
           setStatus(e.status || "draft");
+          setPsychologistIds(
+            e.assignees?.length
+              ? e.assignees.map((a) => a.user.id)
+              : [e.psychologist?.id || currentUser?.id].filter(Boolean)
+          );
         })
         .catch((err) => setError("Не вдалося завантажити захід: " + err.message))
         .finally(() => setLoading(false));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [eventId, isNew]);
+  }, [eventId, isNew, currentUser?.id]);
 
   useEffect(() => {
     if (!openHistory || isNew || loading) return;
@@ -98,6 +115,7 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
       is_controlled: isControlled,
       control_source: isControlled ? controlSource : null,
       execution_deadline: isControlled && deadline ? deadline + ":00Z" : null,
+      psychologist_ids: isAdmin ? psychologistIds : undefined,
     };
     try {
       if (isNew) {
@@ -214,6 +232,40 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
                     <input className="input" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={isReadOnly} />
                   </label>
                 </div>
+
+                {isAdmin && (
+                  <label className="field" style={{ marginTop: 10 }}>
+                    <span className="field-label">Відповідальні психологи</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4, maxHeight: 160, overflowY: "auto" }}>
+                      {[
+                        ...(currentUser?.id ? [currentUser] : []),
+                        ...psychologists.filter((p) => p.id !== currentUser?.id),
+                      ].map((p) => {
+                        const on = psychologistIds.includes(p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            className={"checkbox" + (on ? " on" : "") + (isReadOnly ? " disabled" : "")}
+                            onClick={() => {
+                              if (isReadOnly) return;
+                              setPsychologistIds((prev) => (
+                                prev.includes(p.id)
+                                  ? (prev.length > 1 ? prev.filter((id) => id !== p.id) : prev)
+                                  : [...prev, p.id]
+                              ));
+                            }}
+                          >
+                            <span className="checkbox-mark">{on ? "✓" : ""}</span>
+                            <div className="checkbox-content">
+                              <div className="checkbox-title">{[p.last_name, p.first_name, p.patronymic].filter(Boolean).join(" ") || p.username}</div>
+                              <div className="checkbox-desc">{p.username}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </label>
+                )}
 
                 <div className="field" style={{ marginTop: 10 }}>
                   <span className="field-label">Вид заходу <span className="req">*</span></span>

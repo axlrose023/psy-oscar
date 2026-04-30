@@ -186,6 +186,14 @@ body[data-theme="gov"] {
   background: rgba(0,0,0,0.04);
   color: var(--text-bright);
 }
+[data-theme="gov"] .nav-item.disabled {
+  color: var(--text-faint);
+  opacity: 1;
+}
+[data-theme="gov"] .nav-item.disabled:hover {
+  background: transparent;
+  color: var(--text-faint);
+}
 [data-theme="gov"] .nav-item.active {
   background: #FFFFFF;
   color: var(--accent);
@@ -3310,9 +3318,11 @@ body[data-theme="gov"] {
 /* ── KANBAN board (k-* classes) — bigger, calmer ──────── */
 [data-theme="gov"] .kanban-v2 {
   display: grid;
-  grid-template-columns: repeat(6, minmax(240px, 1fr));
+  grid-template-columns: repeat(6, 252px);
   gap: 12px;
-  margin: 16px 24px;
+  width: max-content;
+  max-width: none;
+  margin: 16px 0 0;
   border: none;
   background: transparent;
 }

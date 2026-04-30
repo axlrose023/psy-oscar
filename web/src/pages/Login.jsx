@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { login } from "../api/index.js";
 
 export default function LoginScreen({ onLogin }) {

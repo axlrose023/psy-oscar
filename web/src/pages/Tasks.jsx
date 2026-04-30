@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { tasks as tasksApi } from "../api/index.js";
 import { TASK_PRIORITIES, TASK_STATUSES } from "../data.js";
 
@@ -40,19 +40,29 @@ function initials(username) {
 
 const LIST_PAGE_SIZE = 15;
 
-export default function TasksPage({ isAdmin, onOpenTask, onNewTask }) {
+function canDropTask(task, colId, isAdmin) {
+  if (!task || task.status === colId) return false;
+  if (colId === "in_progress") return ["assigned", "revision_requested"].includes(task.status);
+  if (colId === "under_review") return task.status === "in_progress";
+  if (colId === "completed") return isAdmin && task.status === "under_review";
+  if (colId === "revision_requested") return isAdmin && task.status === "under_review";
+  return false;
+}
+
+export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask }) {
   const [view, setView]       = useState(() => localStorage.getItem("tasks_view") || "kanban");
   const [filter, setFilter]   = useState("all");
   const [taskList, setTaskList] = useState(null);
   const [dragging, setDragging] = useState(null);
   const [listPage, setListPage] = useState(1);
-  const todayIso = isoToday();
 
   const loadTasks = useCallback(async () => {
     try {
       const res = await tasksApi.list({ page_size: 100 });
       setTaskList(res.items || res);
-    } catch {}
+    } catch {
+      setTaskList([]);
+    }
   }, []);
 
   useEffect(() => {
@@ -66,33 +76,39 @@ export default function TasksPage({ isAdmin, onOpenTask, onNewTask }) {
   }, [loadTasks]);
 
   const allTasks = taskList || [];
+  const isMine = useCallback((task) => (
+    (task.assignees || []).some(a => a.user?.id === currentUser?.id)
+  ), [currentUser?.id]);
 
   const quickFilters = [
     { id:"all",     label:"Усі",        count: allTasks.length },
     { id:"active",  label:"Активні",    count: allTasks.filter(t=>t.status!=="completed").length },
-    { id:"mine",    label:"Мої",        count: allTasks.filter(t=>t.assignees?.length>0).length },
+    { id:"mine",    label:"Мої",        count: allTasks.filter(isMine).length },
     { id:"overdue", label:"Прострочені",count: allTasks.filter(t=>isOverdue(t)).length },
   ];
 
   const visible = useMemo(()=>{
     if (!taskList) return [];
     if (filter==="active")  return taskList.filter(t=>t.status!=="completed");
+    if (filter==="mine")    return taskList.filter(isMine);
     if (filter==="overdue") return taskList.filter(t=>isOverdue(t));
     return taskList;
-  }, [taskList, filter]);
+  }, [taskList, filter, isMine]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE));
   const visiblePage = visible.slice((listPage-1)*LIST_PAGE_SIZE, listPage*LIST_PAGE_SIZE);
 
   async function handleDrop(colId, taskId) {
     const task = allTasks.find(t=>t.id===taskId);
-    if (!task || task.status===colId) return;
+    if (!canDropTask(task, colId, isAdmin)) return;
     setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:colId}:t));
     try {
-      if (colId==="in_progress") await tasksApi.start(taskId);
-      else if (colId==="under_review") await tasksApi.submit(taskId);
-      else if (colId==="completed") await tasksApi.approve(taskId);
-      else await tasksApi.update(taskId,{status:colId});
+      let updated;
+      if (colId==="in_progress") updated = await tasksApi.start(taskId);
+      else if (colId==="under_review") updated = await tasksApi.submit(taskId);
+      else if (colId==="completed") updated = await tasksApi.approve(taskId);
+      else if (colId==="revision_requested") updated = await tasksApi.requestRevision(taskId, "Повернуто на доопрацювання через дошку");
+      if (updated) setTaskList(prev=>prev.map(t=>t.id===taskId?updated:t));
     } catch { loadTasks(); }
   }
 
@@ -132,8 +148,8 @@ export default function TasksPage({ isAdmin, onOpenTask, onNewTask }) {
           <div style={{padding:48,textAlign:"center",fontFamily:"var(--mono)",fontSize:11,color:"var(--text-faint)"}}>Завантаження…</div>
         )}
         {taskList!==null && view==="kanban" && (
-          <KanbanBoard tasks={visible} onOpenTask={onOpenTask} onDrop={handleDrop} todayIso={todayIso}
-            dragging={dragging} setDragging={setDragging}/>
+          <KanbanBoard tasks={visible} onOpenTask={onOpenTask} onDrop={handleDrop}
+            dragging={dragging} setDragging={setDragging} isAdmin={isAdmin}/>
         )}
         {taskList!==null && view==="list" && (
           <>
@@ -152,50 +168,79 @@ export default function TasksPage({ isAdmin, onOpenTask, onNewTask }) {
   );
 }
 
-function KanbanBoard({ tasks, onOpenTask, onDrop, todayIso, dragging, setDragging }) {
+function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin }) {
   const [dropTarget, setDropTarget] = useState(null);
+  const suppressClickRef = useRef(false);
+  const draggingTask = tasks.find(t=>t.id===dragging);
 
   function handleDragStart(e, task) {
     setDragging(task.id);
+    suppressClickRef.current = true;
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", task.id);
   }
-  function handleDragEnd() { setDragging(null); setDropTarget(null); }
-  function handleDragOver(e, colId) { e.preventDefault(); setDropTarget(colId); }
-  function handleDrop(e, colId) { e.preventDefault(); if (dragging) onDrop(colId, dragging); setDragging(null); setDropTarget(null); }
+  function handleDragEnd() {
+    setDragging(null);
+    setDropTarget(null);
+    window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+  }
+  function handleDragOver(e, colId) {
+    if (!draggingTask || !canDropTask(draggingTask, colId, isAdmin)) {
+      e.dataTransfer.dropEffect = "none";
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropTarget(colId);
+  }
+  function handleDrop(e, colId) {
+    e.preventDefault();
+    const taskId = dragging || e.dataTransfer.getData("text/plain");
+    if (taskId) onDrop(colId, taskId);
+    setDragging(null);
+    setDropTarget(null);
+  }
+  function openTask(taskId) {
+    if (suppressClickRef.current) return;
+    onOpenTask(taskId);
+  }
 
   return (
-    <div className="kanban-v2">
-      {KANBAN_COLS.map(col=>{
-        const colTasks = tasks.filter(t=>t.status===col.id);
-        const isTarget = dropTarget===col.id;
-        return (
-          <div key={col.id} className="k-col"
-            onDragOver={e=>handleDragOver(e,col.id)}
-            onDragLeave={()=>setDropTarget(null)}
-            onDrop={e=>handleDrop(e,col.id)}
-            style={isTarget?{outline:"2px solid var(--accent)",outlineOffset:-2}:{}}>
-            <div className="k-col-head" style={{color:col.color}}>
-              <span className="lbl">{col.label}</span>
-              <span className="cnt">{colTasks.length}</span>
+    <div className="kanban-scroll">
+      <div className="kanban-v2">
+        {KANBAN_COLS.map(col=>{
+          const colTasks = tasks.filter(t=>t.status===col.id);
+          const isTarget = dropTarget===col.id;
+          const canDrop = draggingTask ? canDropTask(draggingTask, col.id, isAdmin) : true;
+          return (
+            <div key={col.id} className={"k-col"+(draggingTask && !canDrop ? " drop-disabled" : "")}
+              onDragOver={e=>handleDragOver(e,col.id)}
+              onDragLeave={()=>setDropTarget(null)}
+              onDrop={e=>handleDrop(e,col.id)}
+              style={isTarget?{outline:"2px solid var(--accent)",outlineOffset:-2}:{}}>
+              <div className="k-col-head" style={{color:col.color}}>
+                <span className="lbl">{col.label}</span>
+                <span className="cnt">{colTasks.length}</span>
+              </div>
+              <div className="k-col-body">
+                {colTasks.length===0 && <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--text-faint)",padding:"8px 0",textAlign:"center"}}>— немає —</div>}
+                {colTasks.map(t=>(
+                  <KCard key={t.id} task={t}
+                    onOpen={openTask}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    isDragging={dragging===t.id}/>
+                ))}
+              </div>
             </div>
-            <div className="k-col-body">
-              {colTasks.length===0 && <div style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--text-faint)",padding:"8px 0",textAlign:"center"}}>— немає —</div>}
-              {colTasks.map(t=>(
-                <KCard key={t.id} task={t} todayIso={todayIso}
-                  onOpen={onOpenTask}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  isDragging={dragging===t.id}/>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function KCard({ task, todayIso, onOpen, onDragStart, onDragEnd, isDragging }) {
+function KCard({ task, onOpen, onDragStart, onDragEnd, isDragging }) {
   const overdue = isOverdue(task);
   const pri = TASK_PRIORITIES.find(p=>p.value===task.priority);
   const priColor = pri?.color || "var(--text-faint)";
