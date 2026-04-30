@@ -36,7 +36,6 @@ class CreateEventRequest(BaseModel):
     execution_deadline: datetime.datetime | None = None
     status: EventStatus = EventStatus.DRAFT
     result: str | None = None
-    psychologist_id: UUID
     task_id: UUID | None = None
 
     model_config = ConfigDict(extra="forbid")

@@ -7,6 +7,7 @@ from app.api.common.utils import build_filters
 from app.api.modules.events.enums import EventStatus
 from app.api.modules.events.manager import EventManager
 from app.api.modules.events.models import Event
+from app.api.modules.users.enums import UserRole
 from app.api.modules.events.schema import (
     CancelEventRequest,
     CompleteEventRequest,
@@ -24,7 +25,7 @@ class EventService(EventManager):
     async def create_event(self, request: CreateEventRequest, current_user: User) -> Event:
         if request.start_time and request.end_time:
             overlap = await self.uow.events.check_overlap(
-                psychologist_id=request.psychologist_id,
+                psychologist_id=current_user.id,
                 date=request.date,
                 start_time=request.start_time,
                 end_time=request.end_time,
@@ -60,7 +61,7 @@ class EventService(EventManager):
             execution_deadline=request.execution_deadline,
             status=request.status,
             result=request.result,
-            psychologist_id=request.psychologist_id,
+            psychologist_id=current_user.id,
             created_by_id=current_user.id,
             task_id=request.task_id,
         )
@@ -79,6 +80,10 @@ class EventService(EventManager):
         # Handle custom range filters
         date_gte = filter_data.pop("date__gte", None)
         date_lte = filter_data.pop("date__lte", None)
+
+        # Psychologists only see their own events
+        if current_user.role != UserRole.admin:
+            filter_data["psychologist_id"] = current_user.id
 
         filters = build_filters(Event, filter_data)
 

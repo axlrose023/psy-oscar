@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import BinaryExpression, and_, func, select
+from sqlalchemy import BinaryExpression, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -61,13 +61,17 @@ class TaskGateway:
     ) -> Sequence[Task]:
         stmt = (
             select(Task)
-            .join(TaskAssignee, TaskAssignee.task_id == Task.id)
+            .outerjoin(TaskAssignee, TaskAssignee.task_id == Task.id)
             .options(
                 joinedload(Task.created_by),
                 joinedload(Task.assignees).joinedload(TaskAssignee.user),
                 joinedload(Task.subtasks),
             )
-            .where(and_(TaskAssignee.user_id == user_id, Task.parent_task_id.is_(None), *extra_filters))
+            .where(and_(
+                or_(TaskAssignee.user_id == user_id, Task.created_by_id == user_id),
+                Task.parent_task_id.is_(None),
+                *extra_filters,
+            ))
             .order_by(Task.created_at.desc())
             .offset(offset)
             .limit(limit)
@@ -79,10 +83,14 @@ class TaskGateway:
         self, user_id: UUID, extra_filters: list[BinaryExpression]
     ) -> int:
         stmt = (
-            select(func.count())
+            select(func.count(func.distinct(Task.id)))
             .select_from(Task)
-            .join(TaskAssignee, TaskAssignee.task_id == Task.id)
-            .where(and_(TaskAssignee.user_id == user_id, Task.parent_task_id.is_(None), *extra_filters))
+            .outerjoin(TaskAssignee, TaskAssignee.task_id == Task.id)
+            .where(and_(
+                or_(TaskAssignee.user_id == user_id, Task.created_by_id == user_id),
+                Task.parent_task_id.is_(None),
+                *extra_filters,
+            ))
         )
         result = await self.session.execute(stmt)
         return result.scalar()

@@ -21,7 +21,11 @@ class TaskManager:
         return task
 
     def _ensure_has_access(self, task: Task, user: User) -> None:
-        if user.role == UserRole.psychologist and not task.is_assigned_to(user.id):
+        if (
+            user.role == UserRole.psychologist
+            and not task.is_assigned_to(user.id)
+            and task.created_by_id != user.id
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this task",

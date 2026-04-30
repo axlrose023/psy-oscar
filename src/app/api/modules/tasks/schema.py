@@ -123,6 +123,7 @@ class TaskHistoryResponse(BaseModel):
 
 class TasksPaginationParams(PaginationParams):
     status: TaskStatus | None = None
+    status__in: list[TaskStatus] | None = None
     priority: TaskPriority | None = None
     title__search: str | None = None
 

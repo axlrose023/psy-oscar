@@ -60,12 +60,16 @@ class TestCreateTask:
         data = resp.json()
         assert len(data["assignees"]) == 2
 
-    async def test_create_task_forbidden_psychologist(
-        self, client: AsyncClient, authenticated_psychologist: dict
+    async def test_psychologist_can_create_own_task(
+        self, client: AsyncClient, authenticated_psychologist: dict, psychologist_user
     ):
         headers = {"Authorization": f"Bearer {authenticated_psychologist['access_token']}"}
-        resp = await client.post(self.endpoint, json={"title": "Forbidden"}, headers=headers)
-        assert resp.status_code == 403
+        resp = await client.post(self.endpoint, json={"title": "Own task"}, headers=headers)
+
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["created_by"]["id"] == str(psychologist_user.id)
+        assert data["assignees"][0]["user"]["id"] == str(psychologist_user.id)
 
     async def test_create_task_unauthorized(self, client: AsyncClient):
         resp = await client.post(self.endpoint, json={"title": "No auth"})

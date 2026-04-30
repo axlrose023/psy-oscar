@@ -12,6 +12,7 @@ from app.api.modules.auth.services.auth import (
 from app.api.modules.users.manager import UserService
 from app.api.modules.users.models import User
 from app.api.modules.users.schema import (
+    BirthdayEntry,
     ChangePasswordRequest,
     UpdateUserProfileRequest,
     UserCourseCreate,
@@ -38,6 +39,15 @@ router = APIRouter(route_class=DishkaRoute)
 
 
 # --- List / Detail (psychologist+) ---
+
+
+@router.get("/birthdays", response_model=list[BirthdayEntry])
+async def get_birthdays(
+    service: FromDishka[UserService],
+    current_user: User = Depends(AuthenticatePsychologist()),
+    days: int = Query(30, ge=1, le=365),  # type: ignore[assignment]
+) -> list[BirthdayEntry]:
+    return await service.get_birthdays(days=days)
 
 
 @router.get("", response_model=UsersPaginationResponse)

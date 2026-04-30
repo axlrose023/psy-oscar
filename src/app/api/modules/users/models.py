@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import UUID, Boolean, Date, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import UUID, Boolean, Date, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.api.modules.users.enums import UserRole
@@ -11,7 +11,7 @@ from app.database.base import Base, DateTimeMixin, UUID7IDMixin
 class User(Base, UUID7IDMixin, DateTimeMixin):
     __tablename__ = "users"
 
-    username: Mapped[str] = mapped_column(String, index=True)
+    username: Mapped[str] = mapped_column(String, index=True, unique=True)
     password: Mapped[str] = mapped_column(String)
     role: Mapped[UserRole] = mapped_column(
         Enum(
@@ -22,6 +22,7 @@ class User(Base, UUID7IDMixin, DateTimeMixin):
         default=UserRole.respondent,
     )
     is_active: Mapped[bool] = mapped_column(default=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"), default=False)
 
     # --- Profile fields ---
     tax_number: Mapped[str | None] = mapped_column(String(10), unique=True, nullable=True)

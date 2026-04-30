@@ -15,6 +15,8 @@ class UserResponse(BaseModel):
     id: UUID
     username: str
     role: UserRole
+    is_active: bool
+    is_archived: bool
 
 
 # --- Related entity schemas ---
@@ -169,6 +171,7 @@ class UserDetailResponse(UserResponse):
     contract_end_date: datetime.date | None = None
     pz_direction: str | None = None
     is_active: bool
+    is_archived: bool
 
     family_members: list[UserFamilyMemberResponse] = []
     education: list[UserEducationResponse] = []
@@ -214,6 +217,21 @@ class ChangePasswordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# --- Birthdays ---
+
+
+class BirthdayEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    username: str
+    last_name: str | None = None
+    first_name: str | None = None
+    patronymic: str | None = None
+    military_rank: str | None = None
+    birth_date: datetime.date
+    days_until: int
+
+
 # --- Pagination (existing) ---
 
 
@@ -226,6 +244,7 @@ class UsersPaginationParams(PaginationParams):
     id: UUID | None = None
     username: str | None = None
     username__search: str | None = None
+    role: UserRole | None = None
 
 
 # --- Create (existing, unchanged) ---

@@ -44,6 +44,15 @@ async def create_user(
     return await service.create_user(request)
 
 
+@router.post("/{user_id}/archive", response_model=UserResponse)
+async def archive_user(
+    service: FromDishka[UserService],
+    current_user: User = Depends(AuthenticateAdmin()),
+    user_id: UUID = Path(...),
+) -> UserResponse:
+    return await service.archive_user(user_id)
+
+
 @router.patch("/{user_id}", response_model=UserDetailResponse)
 async def update_user_profile(
     request: UpdateUserProfileRequest,

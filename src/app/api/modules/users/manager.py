@@ -1,3 +1,4 @@
+import datetime
 from uuid import UUID
 
 import bcrypt
@@ -108,6 +109,13 @@ class UserService:
         return await self._get_detail_or_404(user_id)
 
     async def create_user(self, request: CreateUserRequest) -> User:
+        filters = build_filters(User, {"username": request.username})
+        existing = await self.uow.users.get_all(limit=1, offset=0, filters=filters)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Логін '{request.username}' вже використовується",
+            )
         hashed_password = self.auth_service.hash_password(request.password)
         user = User(
             username=request.username,
@@ -118,6 +126,38 @@ class UserService:
         await self.uow.users.create(user)
         await self.uow.commit()
         return user
+
+    # --- Birthdays ---
+
+    async def get_birthdays(self, days: int = 30) -> list:
+        today = datetime.date.today()
+        results = []
+        stmt = select(User).where(
+            User.birth_date.isnot(None),
+            User.role == UserRole.psychologist,
+            User.is_archived.is_(False),
+            User.is_active.is_(True),
+        )
+        rows = (await self.uow.session.execute(stmt)).scalars().all()
+        for u in rows:
+            bd: datetime.date = u.birth_date  # type: ignore[assignment]
+            this_year = bd.replace(year=today.year)
+            if this_year < today:
+                this_year = bd.replace(year=today.year + 1)
+            diff = (this_year - today).days
+            if diff <= days:
+                results.append({
+                    "id": u.id,
+                    "username": u.username,
+                    "last_name": u.last_name,
+                    "first_name": u.first_name,
+                    "patronymic": u.patronymic,
+                    "military_rank": u.military_rank,
+                    "birth_date": u.birth_date,
+                    "days_until": diff,
+                })
+        results.sort(key=lambda x: x["days_until"])
+        return results
 
     # --- Profile ---
 
@@ -193,3 +233,15 @@ class UserService:
         entity = await self._get_related_or_404(entity_name, entity_id, user_id)
         await self.uow.session.delete(entity)
         await self.uow.commit()
+
+    async def archive_user(self, user_id: UUID) -> User:
+        user = await self._get_user_or_404(user_id)
+        if user.is_archived:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already archived",
+            )
+        user.is_archived = True
+        user.is_active = False
+        await self.uow.commit()
+        return await self._get_user_or_404(user_id)

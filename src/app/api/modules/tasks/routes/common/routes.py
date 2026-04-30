@@ -8,6 +8,7 @@ from fastapi.params import Query
 from app.api.modules.auth.services.auth import AuthenticatePsychologist
 from app.api.modules.tasks.schema import (
     CommentRequest,
+    CreateTaskRequest,
     TaskCommentResponse,
     TaskHistoryResponse,
     TaskResponse,
@@ -21,6 +22,15 @@ from app.api.modules.tasks.services.task import TaskService
 from app.api.modules.users.models import User
 
 router = APIRouter(route_class=DishkaRoute)
+
+
+@router.post("", response_model=TaskResponse, status_code=201)
+async def create_task(
+    request: CreateTaskRequest,
+    service: FromDishka[TaskService],
+    current_user: User = Depends(AuthenticatePsychologist()),
+) -> TaskResponse:
+    return await service.create_task(request, current_user)
 
 
 @router.get("", response_model=TasksPaginationResponse)

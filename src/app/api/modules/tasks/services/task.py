@@ -34,15 +34,24 @@ class TaskService(TaskManager):
             except Exception:
                 pass  # Notifications are non-critical
 
-    # --- Admin endpoints ---
+    # --- Task creation/editing ---
 
     async def create_task(self, request: CreateTaskRequest, current_user: User) -> Task:
         if request.parent_task_id:
-            await self._get_task_or_404(request.parent_task_id)
+            parent_task = await self._get_task_or_404(request.parent_task_id)
+            self._ensure_has_access(parent_task, current_user)
 
-        assignees = []
-        if request.assigned_to_ids:
-            assignees = await self._build_assignees(request.assigned_to_ids)
+        assignee_ids = request.assigned_to_ids or []
+        if current_user.role != UserRole.admin:
+            if assignee_ids and any(user_id != current_user.id for user_id in assignee_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only admins can assign tasks to other users",
+                )
+            if current_user.id not in assignee_ids:
+                assignee_ids = [current_user.id, *assignee_ids]
+
+        assignees = await self._build_assignees(assignee_ids) if assignee_ids else []
 
         task = Task(
             title=request.title,
