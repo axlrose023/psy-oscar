@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { tasks as tasksApi, events as eventsApi, users } from "../api/index.js";
 import { TaskStatusBadge, PriorityBadge } from "./StatusBadge.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
@@ -17,6 +17,63 @@ function fmtDate(iso) {
 function toDatetimeLocal(iso) {
   if (!iso) return "";
   return iso.slice(0, 16);
+}
+
+const TASK_STATUS_LABELS = {
+  created: "Створено",
+  assigned: "Призначено",
+  in_progress: "У роботі",
+  under_review: "На перевірці",
+  revision_requested: "Потребує правок",
+  completed: "Виконано",
+};
+
+const TASK_HISTORY_LABELS = {
+  created: "Створення",
+  assigned: "Призначення",
+  unassigned: "Зняття виконавців",
+  in_progress: "У роботі",
+  under_review: "На перевірці",
+  revision_requested: "Потребує правок",
+  completed: "Виконано",
+  updated: "Оновлення",
+  status_changed: "Зміна статусу",
+  deleted: "Видалення",
+};
+
+const TASK_HISTORY_DESCRIPTIONS = {
+  "Task created": "Задачу створено",
+  "Task updated": "Задачу оновлено",
+  "Task approved": "Задачу затверджено та виконано",
+  "Task deleted": "Задачу видалено",
+  "Task returned to work": "Задачу повернуто в роботу",
+  "Task started": "Задачу взято в роботу",
+  "Task submitted for review": "Задачу передано на перевірку",
+};
+
+function formatTaskHistoryDescription(h) {
+  const desc = h.description || "";
+  if (!desc) return "";
+  if (TASK_HISTORY_DESCRIPTIONS[desc]) return TASK_HISTORY_DESCRIPTIONS[desc];
+  if (desc.startsWith("Assigned: ")) return `Призначено виконавців: ${desc.slice("Assigned: ".length)}`;
+  if (desc.startsWith("Removed assignees: ")) return `Знято виконавців: ${desc.slice("Removed assignees: ".length)}`;
+  const statusMatch = desc.match(/^([a-z_]+) → ([a-z_]+)$/);
+  if (statusMatch) {
+    const from = TASK_STATUS_LABELS[statusMatch[1]] || statusMatch[1];
+    const to = TASK_STATUS_LABELS[statusMatch[2]] || statusMatch[2];
+    return `Статус змінено: ${from} → ${to}`;
+  }
+  if (h.event === "revision_requested" && !desc.startsWith("Потрібні правки:")) {
+    return `Потрібні правки: ${desc}`;
+  }
+  return desc;
+}
+
+function revisionTextFromDescription(description) {
+  const desc = description || "";
+  return desc.startsWith("Потрібні правки:")
+    ? desc.slice("Потрібні правки:".length).trim()
+    : desc;
 }
 
 function SectionHead({ num, title, action }) {
@@ -44,14 +101,17 @@ function CommentItem({ c }) {
 }
 
 function HistoryItem({ h }) {
-  const icons = { created:"✦", assigned:"→", unassigned:"←", started:"▶", submitted:"↑", approved:"✓", revision_requested:"↺", completed:"★", updated:"✎" };
+  const icons = { created:"✦", assigned:"→", unassigned:"←", in_progress:"▶", under_review:"↑", status_changed:"↔", revision_requested:"↺", completed:"✓", updated:"✎", deleted:"×" };
+  const label = TASK_HISTORY_LABELS[h.event] || h.event;
+  const description = formatTaskHistoryDescription(h);
   return (
     <div style={{ display:"flex", gap:10, fontSize:12, padding:"6px 0", borderBottom:"1px solid var(--border, #E2DDD6)" }}>
       <span style={{ minWidth:16, textAlign:"center", color:"var(--accent, #5B6A4A)" }}>{icons[h.event] || "·"}</span>
       <div style={{ flex:1 }}>
         <span style={{ color:"var(--text-faint)" }}>{fmtDateTime(h.created_at)}</span>{" · "}
-        <b>{h.changed_by?.username || "—"}</b>
-        {h.description && <span style={{ color:"var(--text-body)" }}> — {h.description}</span>}
+        <b>{label}</b>
+        <span style={{ color:"var(--text-faint)" }}> · {h.changed_by?.username || "—"}</span>
+        {description && <span style={{ color:"var(--text-body)" }}> — {description}</span>}
       </div>
     </div>
   );
@@ -111,11 +171,30 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   const [revisionComment, setRevisionComment] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const loadTaskHistory = useCallback((openAfterLoad = true) => {
+    if (!taskId) return Promise.resolve([]);
+    setHistoryLoading(true);
+    return tasksApi.history(taskId)
+      .then((h) => {
+        setHistory(h || []);
+        if (openAfterLoad) setShowHistory(true);
+        return h || [];
+      })
+      .catch(() => {
+        setHistory([]);
+        if (openAfterLoad) setShowHistory(true);
+        return [];
+      })
+      .finally(() => setHistoryLoading(false));
+  }, [taskId]);
+
   useEffect(() => {
     if (isNew) return;
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError(null);
+      setHistory(null);
+      setShowHistory(false);
       tasksApi.get(taskId)
         .then((t) => {
           setTask(t);
@@ -139,6 +218,12 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   }, [taskId, isNew]);
 
   useEffect(() => {
+    if (isNew || !taskId || task?.status !== "revision_requested" || history !== null || historyLoading) return;
+    const timer = window.setTimeout(() => loadTaskHistory(false), 0);
+    return () => window.clearTimeout(timer);
+  }, [isNew, taskId, task?.status, history, historyLoading, loadTaskHistory]);
+
+  useEffect(() => {
     if (!isAdmin) return;
     const timer = window.setTimeout(() => {
       setPsyLoading(true);
@@ -153,11 +238,7 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   function toggleHistory() {
     if (showHistory) { setShowHistory(false); return; }
     if (history !== null) { setShowHistory(true); return; }
-    setHistoryLoading(true);
-    tasksApi.history(taskId)
-      .then((h) => { setHistory(h || []); setShowHistory(true); })
-      .catch(() => setHistory([]))
-      .finally(() => setHistoryLoading(false));
+    loadTaskHistory(true);
   }
 
   async function handleCreate() {
@@ -204,6 +285,7 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
         updated = await tasksApi.unassign(taskId, { user_ids: ids });
       } else if (action === "start")   { updated = await tasksApi.start(taskId); }
       else if (action === "return_assigned") { updated = await tasksApi.update(taskId, { status: "assigned" }); }
+      else if (action === "return_review") { updated = await tasksApi.update(taskId, { status: "under_review" }); }
       else if (action === "complete_subtask") { updated = await tasksApi.update(taskId, { status: "completed" }); }
       else if (action === "submit")    { updated = await tasksApi.submit(taskId); }
       else if (action === "approve")   { updated = await tasksApi.approve(taskId); }
@@ -212,7 +294,11 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
         if (window.__tasksReload) window.__tasksReload();
         onSaved?.(); return;
       }
-      if (updated) { setTask(updated); setSelectedIds(updated.assignees?.map(a => a.user.id) || []); }
+      if (updated) {
+        setTask(updated);
+        setSelectedIds(updated.assignees?.map(a => a.user.id) || []);
+        setHistory(null);
+      }
       if (window.__tasksReload) window.__tasksReload();
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
@@ -224,6 +310,8 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
     try {
       const updated = await tasksApi.requestRevision(taskId, revisionComment.trim());
       setTask(updated); setShowRevision(false); setRevisionComment("");
+      setHistory(null);
+      tasksApi.comments(taskId).then((c) => setComments(c || [])).catch(() => {});
       if (window.__tasksReload) window.__tasksReload();
     } catch (e) { setError(e.message); }
     finally { setSaving(false); }
@@ -251,6 +339,8 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   const isAssignee  = !!task?.assignees?.some(a => a.user?.id === currentUser?.id);
   const isSubtask   = !!task?.parent_task_id;
   const canCompleteSubtask = isSubtask && !isCompleted && (isAdmin || isAssignee || task?.created_by?.id === currentUser?.id);
+  const latestRevision = history?.find(h => h.event === "revision_requested");
+  const latestRevisionText = latestRevision ? revisionTextFromDescription(latestRevision.description) : "";
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -272,6 +362,20 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
 
           {!loading && (
             <>
+              {!isNew && status === "revision_requested" && (
+                <div className="revision-note">
+                  <div className="revision-note-title">Потрібні правки</div>
+                  <div className="revision-note-text">
+                    {latestRevisionText || (historyLoading ? "Завантаження вимог…" : "Адміністратор повернув задачу на доопрацювання. Деталі є в журналі змін або коментарях.")}
+                  </div>
+                  {latestRevision?.changed_by?.username && (
+                    <div className="revision-note-meta">
+                      {latestRevision.changed_by.username} · {fmtDateTime(latestRevision.created_at)}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 1. Основне */}
               <div className="form-section">
                 <SectionHead num="1" title="Основне" />
@@ -521,6 +625,10 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
               <>
                 {!isSubtask && status === "under_review" && <>
                   <button className="btn danger small" disabled={saving} onClick={() => setShowRevision(true)}>На доопрацювання</button>
+                  <button className="btn primary small" disabled={saving} onClick={() => handleAction("approve")}>Затвердити ✓</button>
+                </>}
+                {!isSubtask && status === "revision_requested" && <>
+                  <button className="btn ghost small" disabled={saving} onClick={() => handleAction("return_review")}>Назад на перевірку</button>
                   <button className="btn primary small" disabled={saving} onClick={() => handleAction("approve")}>Затвердити ✓</button>
                 </>}
                 {status === "created" && <>

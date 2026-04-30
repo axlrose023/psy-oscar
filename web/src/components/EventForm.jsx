@@ -4,6 +4,33 @@ import { ACTIVITY_TYPES, PERSONNEL_CATEGORIES } from "../data.js";
 import { StatusBadge } from "./StatusBadge.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
+const EVENT_HISTORY_LABELS = {
+  created: "Створення",
+  updated: "Оновлення",
+  completed: "Виконано",
+  postponed: "Перенесено",
+  cancelled: "Скасовано",
+  archived: "Архівовано",
+  overdue: "Прострочено",
+};
+
+const EVENT_HISTORY_DESCRIPTIONS = {
+  "Event created": "Захід створено",
+  "Event updated": "Захід оновлено",
+  "Event completed": "Захід виконано",
+  "Event archived": "Захід архівовано",
+  "Automatically marked as overdue": "Автоматично позначено як прострочений",
+};
+
+function formatEventHistoryDescription(h) {
+  const desc = h.description || "";
+  if (!desc) return "";
+  if (EVENT_HISTORY_DESCRIPTIONS[desc]) return EVENT_HISTORY_DESCRIPTIONS[desc];
+  if (desc.startsWith("Postponed: ")) return `Захід перенесено: ${desc.slice("Postponed: ".length)}`;
+  if (desc.startsWith("Cancelled: ")) return `Захід скасовано: ${desc.slice("Cancelled: ".length)}`;
+  return desc;
+}
+
 export default function EventForm({ eventId, onClose, onSaved, openHistory, linkedTaskId, isAdmin, currentUser }) {
   const isNew = !eventId;
 
@@ -372,8 +399,8 @@ export default function EventForm({ eventId, onClose, onSaved, openHistory, link
                       {history.map((h) => (
                         <div key={h.id} className="ef-history-row">
                           <span className="ef-history-time">{h.created_at?.slice(0, 16).replace("T", " ")}</span>
-                          <span className="ef-history-type">{h.event_type}</span>
-                          <span className="ef-history-desc">{h.description}</span>
+                          <span className="ef-history-type">{EVENT_HISTORY_LABELS[h.event_type] || h.event_type}</span>
+                          <span className="ef-history-desc">{formatEventHistoryDescription(h)}</span>
                           <span className="ef-history-who">{h.changed_by?.username || "система"}</span>
                         </div>
                       ))}

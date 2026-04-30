@@ -37,7 +37,7 @@ async def check_overdue_events(uow: FromDishka[UnitOfWork]):
             event_id=event_id,
             changed_by_id=None,
             event_type="overdue",
-            description="Automatically marked as overdue",
+            description="Автоматично позначено як прострочений",
         )
         uow.session.add(history)
 

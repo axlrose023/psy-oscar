@@ -1063,6 +1063,30 @@ tr:hover .row-actions { opacity: 1; }
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 1.3px;
   text-transform: uppercase; color: var(--text-bright);
 }
+.revision-note {
+  border: 1px solid rgba(185, 28, 28, 0.25);
+  border-left: 4px solid var(--danger, #B91C1C);
+  background: rgba(185, 28, 28, 0.07);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+}
+.revision-note-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger, #B91C1C);
+  margin-bottom: 6px;
+}
+.revision-note-text {
+  font-size: 13px;
+  color: var(--text-bright);
+  white-space: pre-wrap;
+}
+.revision-note-meta {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
 
 .row-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .row-3   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -1167,7 +1191,7 @@ tr:hover .row-actions { opacity: 1; }
 .ef-history-empty { color: var(--text-faint); font-size: 11px; padding: 4px 0; }
 .ef-history-row {
   display: grid;
-  grid-template-columns: 120px 110px 1fr 80px;
+  grid-template-columns: 120px 130px 1fr 90px;
   gap: 8px;
   padding: 5px 0;
   border-bottom: 1px solid var(--line-soft);
@@ -1994,6 +2018,26 @@ tr:hover .row-actions { opacity: 1; }
 .k-card.pri-medium { border-left-color: #8F6E2A; }
 .k-card.pri-low { border-left-color: var(--ok); }
 .k-card-meta { display: flex; align-items: center; gap: 6px; }
+.k-drag-handle {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  line-height: 1;
+  cursor: grab;
+  border-radius: 4px;
+}
+.k-drag-handle:hover {
+  color: var(--text-dim);
+  border-color: var(--line-strong);
+}
+.k-drag-handle:active {
+  cursor: grabbing;
+}
 .k-pri { font-family: var(--mono); font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; padding: 1px 6px; border: 1px solid currentColor; }
 .k-overdue { font-family: var(--mono); font-size: 9px; letter-spacing: 0.6px; background: var(--st-overdue); color: #fff; padding: 1px 5px; }
 .k-card .ttl { font-size: 12.5px; font-weight: 500; color: var(--text-bright); line-height: 1.3; }

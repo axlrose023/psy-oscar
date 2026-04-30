@@ -202,3 +202,10 @@ class TestEventWorkflows:
         assert complete_resp.json()["status"] == "completed"
         assert complete_resp.json()["result"] == "Done"
         assert complete_resp.json()["actual_count"] == 1
+
+        history_resp = await client.get(f"/events/{event_id}/history", headers=headers)
+        assert history_resp.status_code == 200
+        descriptions = [item["description"] for item in history_resp.json()]
+        assert "Захід створено" in descriptions
+        assert "Захід перенесено: Schedule changed" in descriptions
+        assert "Захід виконано" in descriptions

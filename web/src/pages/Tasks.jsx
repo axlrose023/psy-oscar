@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { tasks as tasksApi } from "../api/index.js";
 import { TASK_PRIORITIES, TASK_STATUSES } from "../data.js";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 
 const KANBAN_COLS = [
   { id: "created",            label: "Створено",        color: "#6B6B5C" },
@@ -49,8 +50,8 @@ function canDropTask(task, colId, isAdmin, currentUser) {
   const isAssignee = isTaskAssignee(task, currentUser);
   if (colId === "assigned") return isAssignee && ["in_progress", "under_review"].includes(task.status);
   if (colId === "in_progress") return isAssignee && ["assigned", "revision_requested", "under_review"].includes(task.status);
-  if (colId === "under_review") return isAssignee && task.status === "in_progress";
-  if (colId === "completed") return isAdmin && task.status === "under_review";
+  if (colId === "under_review") return (isAssignee && task.status === "in_progress") || (isAdmin && task.status === "revision_requested");
+  if (colId === "completed") return isAdmin && ["under_review", "revision_requested"].includes(task.status);
   if (colId === "revision_requested") return isAdmin && task.status === "under_review";
   return false;
 }
@@ -61,6 +62,9 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
   const [taskList, setTaskList] = useState(null);
   const [dragging, setDragging] = useState(null);
   const [listPage, setListPage] = useState(1);
+  const [revisionDrop, setRevisionDrop] = useState(null);
+  const [revisionComment, setRevisionComment] = useState("");
+  const [revisionSaving, setRevisionSaving] = useState(false);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -108,16 +112,39 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
   async function handleDrop(colId, taskId) {
     const task = allTasks.find(t=>t.id===taskId);
     if (!canDropTask(task, colId, isAdmin, currentUser)) return;
+    if (colId === "revision_requested") {
+      setRevisionDrop(task);
+      setRevisionComment("");
+      return;
+    }
     setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:colId}:t));
     try {
       let updated;
       if (colId==="assigned") updated = await tasksApi.update(taskId, { status: "assigned" });
       else if (colId==="in_progress") updated = await tasksApi.start(taskId);
-      else if (colId==="under_review") updated = await tasksApi.submit(taskId);
+      else if (colId==="under_review") {
+        updated = isAdmin && task.status === "revision_requested"
+          ? await tasksApi.update(taskId, { status: "under_review" })
+          : await tasksApi.submit(taskId);
+      }
       else if (colId==="completed") updated = await tasksApi.approve(taskId);
-      else if (colId==="revision_requested") updated = await tasksApi.requestRevision(taskId, "Повернуто на доопрацювання через дошку");
       if (updated) setTaskList(prev=>prev.map(t=>t.id===taskId?updated:t));
     } catch { loadTasks(); }
+  }
+
+  async function confirmRevisionDrop() {
+    if (!revisionDrop || !revisionComment.trim()) return;
+    setRevisionSaving(true);
+    try {
+      const updated = await tasksApi.requestRevision(revisionDrop.id, revisionComment.trim());
+      setTaskList(prev=>prev?.map(t=>t.id===revisionDrop.id?updated:t) || prev);
+      setRevisionDrop(null);
+      setRevisionComment("");
+    } catch {
+      loadTasks();
+    } finally {
+      setRevisionSaving(false);
+    }
   }
 
   return (
@@ -172,6 +199,32 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
           </>
         )}
       </div>
+      {revisionDrop && (
+        <ConfirmDialog
+          title="Повернути на доопрацювання"
+          confirmText="Повернути"
+          danger
+          disabled={revisionSaving || !revisionComment.trim()}
+          onCancel={() => {
+            if (revisionSaving) return;
+            setRevisionDrop(null);
+            setRevisionComment("");
+          }}
+          onConfirm={confirmRevisionDrop}
+        >
+          <label className="field">
+            <span className="field-label">Що потрібно виправити <span className="req">*</span></span>
+            <textarea
+              className="input textarea"
+              rows={4}
+              value={revisionComment}
+              onChange={(event) => setRevisionComment(event.target.value)}
+              placeholder="Наприклад: додати висновок, уточнити дату, виправити опис результату…"
+              autoFocus
+            />
+          </label>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
@@ -262,13 +315,23 @@ function KCard({ task, onOpen, onDragStart, onDragEnd, isDragging }) {
 
   return (
     <div className={"k-card pri-"+task.priority+(isDragging?" dragging":"")}
-      draggable
-      onDragStart={e=>onDragStart(e,task)}
-      onDragEnd={onDragEnd}
       onClick={()=>onOpen(task.id)}>
       <div className="k-card-meta">
         <span className="k-pri" style={{color:priColor,borderColor:priColor}}>{priLabel}</span>
         {overdue && <span className="k-overdue">ПРОСТР.</span>}
+        <button
+          type="button"
+          className="k-drag-handle"
+          draggable
+          title="Перетягнути"
+          aria-label="Перетягнути задачу"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onDragStart={e=>onDragStart(e,task)}
+          onDragEnd={onDragEnd}
+        >
+          ⋮⋮
+        </button>
         <span style={{marginLeft:"auto",fontFamily:"var(--mono)",fontSize:9,color:"var(--text-faint)"}}>
           #{task.id?.slice(0,6)||"—"}
         </span>

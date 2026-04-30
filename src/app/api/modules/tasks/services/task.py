@@ -7,7 +7,7 @@ from app.api.common.utils import build_filters
 from app.api.modules.notifications.service import NotificationService
 from app.api.modules.tasks.enums import TaskStatus
 from app.api.modules.tasks.manager import TaskManager
-from app.api.modules.tasks.models import Task, TaskAssignee
+from app.api.modules.tasks.models import Task, TaskAssignee, TaskComment
 from app.api.modules.tasks.schema import (
     AssignTaskRequest,
     CreateTaskRequest,
@@ -19,6 +19,16 @@ from app.api.modules.tasks.schema import (
 )
 from app.api.modules.users.enums import UserRole
 from app.api.modules.users.models import User
+
+
+TASK_STATUS_LABELS = {
+    TaskStatus.CREATED: "Створено",
+    TaskStatus.ASSIGNED: "Призначено",
+    TaskStatus.IN_PROGRESS: "У роботі",
+    TaskStatus.UNDER_REVIEW: "На перевірці",
+    TaskStatus.REVISION_REQUESTED: "Потребує правок",
+    TaskStatus.COMPLETED: "Виконано",
+}
 
 
 class TaskService(TaskManager):
@@ -69,11 +79,12 @@ class TaskService(TaskManager):
             assignees=assignees,
         )
         await self.uow.tasks.create(task)
-        await self._record_history(task.id, current_user.id, "created", "Task created")
+        await self._record_history(task.id, current_user.id, "created", "Задачу створено")
         if assignees:
+            assigned_users = await self._format_user_ids([a.user_id for a in assignees])
             await self._record_history(
                 task.id, current_user.id, "assigned",
-                f"Assigned: {', '.join(str(a.user_id) for a in assignees)}",
+                f"Призначено виконавців: {assigned_users}",
             )
 
         await self.uow.commit()
@@ -102,11 +113,12 @@ class TaskService(TaskManager):
                 task.priority = request.priority
             if request.deadline is not None:
                 task.deadline = request.deadline
-            await self._record_history(task.id, current_user.id, "updated", "Task updated")
+            await self._record_history(task.id, current_user.id, "updated", "Задачу оновлено")
 
         if request.status is not None and request.status != task.status:
             self._ensure_status_transition_allowed(task, request.status, current_user)
-            old_status = task.status.value
+            old_status = TASK_STATUS_LABELS.get(task.status, task.status.value)
+            new_status = TASK_STATUS_LABELS.get(request.status, request.status.value)
             task.status = request.status
             if request.status == TaskStatus.COMPLETED and not task.completed_at:
                 task.completed_at = datetime.now(UTC)
@@ -114,7 +126,7 @@ class TaskService(TaskManager):
                 task.completed_at = None
             await self._record_history(
                 task.id, current_user.id, "status_changed",
-                f"{old_status} → {request.status.value}",
+                f"Статус змінено: {old_status} → {new_status}",
             )
 
         await self.uow.commit()
@@ -159,7 +171,7 @@ class TaskService(TaskManager):
             assignee = next((a for a in task.assignees if a.user_id == uid), None)
             if assignee:
                 task.assignees.remove(assignee)
-                removed.append(str(uid))
+                removed.append(uid)
 
         if not removed:
             raise HTTPException(
@@ -167,9 +179,10 @@ class TaskService(TaskManager):
                 detail="None of the specified users are assigned to this task",
             )
 
+        removed_users = await self._format_user_ids(removed)
         await self._record_history(
             task.id, current_user.id, "unassigned",
-            f"Removed assignees: {', '.join(removed)}",
+            f"Знято виконавців: {removed_users}",
         )
 
         if not task.assignees and task.status == TaskStatus.ASSIGNED:
@@ -191,7 +204,14 @@ class TaskService(TaskManager):
             )
         task.status = TaskStatus.REVISION_REQUESTED
         await self._record_history(
-            task.id, current_user.id, "revision_requested", body.comment
+            task.id, current_user.id, "revision_requested", f"Потрібні правки: {body.comment}"
+        )
+        await self.uow.task_comments.create(
+            TaskComment(
+                task_id=task.id,
+                author_id=current_user.id,
+                text=f"Потрібні правки: {body.comment}",
+            )
         )
         # Notify all assignees
         for a in task.assignees:
@@ -208,14 +228,16 @@ class TaskService(TaskManager):
 
     async def approve_task(self, task_id: UUID, current_user: User) -> Task:
         task = await self._get_task_or_404(task_id)
-        if task.status != TaskStatus.UNDER_REVIEW:
+        if task.status not in (TaskStatus.UNDER_REVIEW, TaskStatus.REVISION_REQUESTED):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Can only approve tasks under review",
+                detail="Can only approve tasks under review or revision-requested tasks",
             )
         task.status = TaskStatus.COMPLETED
         task.completed_at = datetime.now(UTC)
-        await self._record_history(task.id, current_user.id, "completed", "Task approved")
+        await self._record_history(
+            task.id, current_user.id, "completed", "Задачу затверджено та виконано"
+        )
         # Notify all assignees
         for a in task.assignees:
             await self._notify(
@@ -232,7 +254,7 @@ class TaskService(TaskManager):
     async def delete_task(self, task_id: UUID, current_user: User) -> None:
         task = await self._get_task_or_404(task_id)
         self._ensure_not_completed(task)
-        await self._record_history(task.id, current_user.id, "deleted", "Task deleted")
+        await self._record_history(task.id, current_user.id, "deleted", "Задачу видалено")
         await self.uow.session.delete(task)
         await self.uow.commit()
 
@@ -253,9 +275,9 @@ class TaskService(TaskManager):
         old_status = task.status
         task.status = TaskStatus.IN_PROGRESS
         description = (
-            "Task returned to work"
+            "Задачу повернуто в роботу"
             if old_status == TaskStatus.UNDER_REVIEW
-            else "Task started"
+            else "Задачу взято в роботу"
         )
         await self._record_history(task.id, current_user.id, "in_progress", description)
         await self.uow.commit()
@@ -271,7 +293,7 @@ class TaskService(TaskManager):
             )
         task.status = TaskStatus.UNDER_REVIEW
         await self._record_history(
-            task.id, current_user.id, "under_review", "Task submitted for review"
+            task.id, current_user.id, "under_review", "Задачу передано на перевірку"
         )
         await self.uow.commit()
         return await self.uow.tasks.get_by_id(task.id)
@@ -331,6 +353,13 @@ class TaskService(TaskManager):
             result.append(TaskAssignee(user_id=uid))
         return result
 
+    async def _format_user_ids(self, user_ids: list[UUID]) -> str:
+        labels = []
+        for user_id in user_ids:
+            user = await self.uow.users.get_by_id(user_id)
+            labels.append(user.username if user else str(user_id))
+        return ", ".join(labels)
+
     async def _add_assignees(
         self, task: Task, user_ids: list[UUID], current_user: User
     ) -> None:
@@ -346,7 +375,7 @@ class TaskService(TaskManager):
 
         await self._record_history(
             task.id, current_user.id, "assigned",
-            f"Assigned: {', '.join(str(uid) for uid in new_ids)}",
+            f"Призначено виконавців: {await self._format_user_ids(new_ids)}",
         )
 
     def _ensure_not_completed(self, task: Task) -> None:

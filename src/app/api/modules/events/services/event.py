@@ -117,7 +117,7 @@ class EventService(EventManager):
             assignees=assignees,
         )
         await self.uow.events.create(event)
-        await self._record_history(event.id, current_user.id, "created", "Event created")
+        await self._record_history(event.id, current_user.id, "created", "Захід створено")
         await self.uow.commit()
         return await self.uow.events.get_by_id(event.id)
 
@@ -209,7 +209,7 @@ class EventService(EventManager):
             event.assignees = assignees
             event.psychologist_id = assignee_ids[0]
 
-        await self._record_history(event.id, current_user.id, "updated", "Event updated")
+        await self._record_history(event.id, current_user.id, "updated", "Захід оновлено")
         event_id = event.id
         await self.uow.commit()
         self.uow.session.expunge(event)
@@ -238,7 +238,7 @@ class EventService(EventManager):
         if request.actual_count is not None:
             event.actual_count = request.actual_count
 
-        await self._record_history(event.id, current_user.id, "completed", "Event completed")
+        await self._record_history(event.id, current_user.id, "completed", "Захід виконано")
         await self.uow.commit()
         return await self.uow.events.get_by_id(event.id)
 
@@ -260,7 +260,7 @@ class EventService(EventManager):
             event.date = request.new_date
 
         await self._record_history(
-            event.id, current_user.id, "postponed", f"Postponed: {request.reason}"
+            event.id, current_user.id, "postponed", f"Захід перенесено: {request.reason}"
         )
         await self.uow.commit()
         return await self.uow.events.get_by_id(event.id)
@@ -281,7 +281,7 @@ class EventService(EventManager):
         event.status_reason = request.reason
 
         await self._record_history(
-            event.id, current_user.id, "cancelled", f"Cancelled: {request.reason}"
+            event.id, current_user.id, "cancelled", f"Захід скасовано: {request.reason}"
         )
         await self.uow.commit()
         return await self.uow.events.get_by_id(event.id)
@@ -298,7 +298,7 @@ class EventService(EventManager):
         event.is_archived = True
         event.archived_at = datetime.now(UTC)
 
-        await self._record_history(event.id, current_user.id, "archived", "Event archived")
+        await self._record_history(event.id, current_user.id, "archived", "Захід архівовано")
         await self.uow.commit()
         return await self.uow.events.get_by_id(event.id)
 

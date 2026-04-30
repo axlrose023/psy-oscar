@@ -880,6 +880,26 @@ body[data-theme="gov"] {
   text-transform: none;
   letter-spacing: 0;
 }
+[data-theme="gov"] .revision-note {
+  background: #FFF7ED;
+  border-color: #FED7AA;
+  border-left-color: #C2410C;
+  border-radius: 6px;
+}
+[data-theme="gov"] .revision-note-title {
+  color: #9A3412;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+[data-theme="gov"] .revision-note-text {
+  color: #1F2937;
+  font-size: 14px;
+  line-height: 1.5;
+}
+[data-theme="gov"] .revision-note-meta {
+  color: #667085;
+  font-family: var(--sans);
+}
 [data-theme="gov"] .field-label {
   font-family: var(--sans);
   font-size: 13px;
@@ -3571,6 +3591,21 @@ body[data-theme="gov"] {
 [data-theme="gov"] .k-card-meta {
   display: flex; align-items: center; gap: 8px;
   margin-bottom: 1px;
+}
+[data-theme="gov"] .k-drag-handle {
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #98A2B3;
+  background: transparent;
+  font-family: var(--sans);
+  font-size: 16px;
+}
+[data-theme="gov"] .k-drag-handle:hover {
+  color: #475467;
+  background: #F2F4F7;
+  border-color: #E1E7F0;
 }
 [data-theme="gov"] .k-pri {
   font-family: var(--sans);

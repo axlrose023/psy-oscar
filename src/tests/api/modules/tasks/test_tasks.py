@@ -211,11 +211,61 @@ class TestTaskWorkflow:
         )
         assert resp.json()["status"] == "revision_requested"
 
+        comments = await client.get(f"{self.endpoint}/{task_id}/comments", headers=psych_h)
+        assert comments.status_code == 200
+        assert "Потрібні правки: Fix formatting" in [
+            comment["text"] for comment in comments.json()
+        ]
+
         # Restart → submit → approve
         await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
         await client.post(f"{self.endpoint}/{task_id}/submit", headers=psych_h)
         resp = await client.post(f"{self.endpoint}/{task_id}/approve", headers=admin_h)
         assert resp.json()["status"] == "completed"
+
+    async def test_admin_can_return_revision_requested_task_to_review_or_approve(
+        self, client: AsyncClient, authenticated_user: dict, authenticated_psychologist: dict, psychologist_user
+    ):
+        admin_h = {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+        psych_h = {"Authorization": f"Bearer {authenticated_psychologist['access_token']}"}
+
+        resp = await client.post(
+            self.endpoint,
+            json={"title": "Admin revision decision", "assigned_to_ids": [str(psychologist_user.id)]},
+            headers=admin_h,
+        )
+        task_id = resp.json()["id"]
+
+        await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
+        await client.post(f"{self.endpoint}/{task_id}/submit", headers=psych_h)
+        await client.post(
+            f"{self.endpoint}/{task_id}/request-revision",
+            json={"comment": "Додати результат співбесіди"},
+            headers=admin_h,
+        )
+
+        resp = await client.patch(
+            f"{self.endpoint}/{task_id}",
+            json={"status": "under_review"},
+            headers=admin_h,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "under_review"
+
+        await client.post(
+            f"{self.endpoint}/{task_id}/request-revision",
+            json={"comment": "Уточнити дату"},
+            headers=admin_h,
+        )
+        resp = await client.post(f"{self.endpoint}/{task_id}/approve", headers=admin_h)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+        history = await client.get(f"{self.endpoint}/{task_id}/history", headers=admin_h)
+        descriptions = [item["description"] for item in history.json()]
+        assert "Потрібні правки: Уточнити дату" in descriptions
+        assert "Статус змінено: Потребує правок → На перевірці" in descriptions
+        assert "Задачу затверджено та виконано" in descriptions
 
     async def test_assignee_can_return_under_review_task_to_work_or_assigned(
         self, client: AsyncClient, authenticated_user: dict, authenticated_psychologist: dict, psychologist_user
