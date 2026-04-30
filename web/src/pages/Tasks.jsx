@@ -40,10 +40,16 @@ function initials(username) {
 
 const LIST_PAGE_SIZE = 15;
 
-function canDropTask(task, colId, isAdmin) {
+function isTaskAssignee(task, currentUser) {
+  return !!(task && currentUser && (task.assignees || []).some(a => a.user?.id === currentUser.id));
+}
+
+function canDropTask(task, colId, isAdmin, currentUser) {
   if (!task || task.status === colId) return false;
-  if (colId === "in_progress") return ["assigned", "revision_requested"].includes(task.status);
-  if (colId === "under_review") return task.status === "in_progress";
+  const isAssignee = isTaskAssignee(task, currentUser);
+  if (colId === "assigned") return isAssignee && ["in_progress", "under_review"].includes(task.status);
+  if (colId === "in_progress") return isAssignee && ["assigned", "revision_requested", "under_review"].includes(task.status);
+  if (colId === "under_review") return isAssignee && task.status === "in_progress";
   if (colId === "completed") return isAdmin && task.status === "under_review";
   if (colId === "revision_requested") return isAdmin && task.status === "under_review";
   return false;
@@ -75,36 +81,38 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
     return ()=>{ window.__tasksReload=null; };
   }, [loadTasks]);
 
-  const allTasks = taskList || [];
+  const allTasks = useMemo(() => taskList || [], [taskList]);
   const isMine = useCallback((task) => (
     (task.assignees || []).some(a => a.user?.id === currentUser?.id)
   ), [currentUser?.id]);
+  const rootTasks = useMemo(() => allTasks.filter(t => !t.parent_task_id), [allTasks]);
 
   const quickFilters = [
-    { id:"all",     label:"Усі",        count: allTasks.length },
-    { id:"active",  label:"Активні",    count: allTasks.filter(t=>t.status!=="completed").length },
-    { id:"mine",    label:"Мої",        count: allTasks.filter(isMine).length },
-    { id:"overdue", label:"Прострочені",count: allTasks.filter(t=>isOverdue(t)).length },
+    { id:"all",     label:"Усі",        count: rootTasks.length },
+    { id:"active",  label:"Активні",    count: rootTasks.filter(t=>t.status!=="completed").length },
+    { id:"mine",    label:"Мої",        count: rootTasks.filter(isMine).length },
+    { id:"overdue", label:"Прострочені",count: rootTasks.filter(t=>isOverdue(t)).length },
   ];
 
   const visible = useMemo(()=>{
     if (!taskList) return [];
-    if (filter==="active")  return taskList.filter(t=>t.status!=="completed");
-    if (filter==="mine")    return taskList.filter(isMine);
-    if (filter==="overdue") return taskList.filter(t=>isOverdue(t));
-    return taskList;
-  }, [taskList, filter, isMine]);
+    if (filter==="active")  return rootTasks.filter(t=>t.status!=="completed");
+    if (filter==="mine")    return rootTasks.filter(isMine);
+    if (filter==="overdue") return rootTasks.filter(t=>isOverdue(t));
+    return rootTasks;
+  }, [taskList, rootTasks, filter, isMine]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / LIST_PAGE_SIZE));
   const visiblePage = visible.slice((listPage-1)*LIST_PAGE_SIZE, listPage*LIST_PAGE_SIZE);
 
   async function handleDrop(colId, taskId) {
     const task = allTasks.find(t=>t.id===taskId);
-    if (!canDropTask(task, colId, isAdmin)) return;
+    if (!canDropTask(task, colId, isAdmin, currentUser)) return;
     setTaskList(prev=>prev.map(t=>t.id===taskId?{...t,status:colId}:t));
     try {
       let updated;
-      if (colId==="in_progress") updated = await tasksApi.start(taskId);
+      if (colId==="assigned") updated = await tasksApi.update(taskId, { status: "assigned" });
+      else if (colId==="in_progress") updated = await tasksApi.start(taskId);
       else if (colId==="under_review") updated = await tasksApi.submit(taskId);
       else if (colId==="completed") updated = await tasksApi.approve(taskId);
       else if (colId==="revision_requested") updated = await tasksApi.requestRevision(taskId, "Повернуто на доопрацювання через дошку");
@@ -117,7 +125,7 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
       <div className="page-head">
         <div className="page-title-row">
           <h1 className="page-title">Задачі</h1>
-          <div className="page-counter"><b>{visible.length}</b> з {allTasks.length}</div>
+          <div className="page-counter"><b>{visible.length}</b> з {rootTasks.length}</div>
         </div>
         <div className="page-actions">
           <div className="view-tabs">
@@ -149,7 +157,7 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
         )}
         {taskList!==null && view==="kanban" && (
           <KanbanBoard tasks={visible} onOpenTask={onOpenTask} onDrop={handleDrop}
-            dragging={dragging} setDragging={setDragging} isAdmin={isAdmin}/>
+            dragging={dragging} setDragging={setDragging} isAdmin={isAdmin} currentUser={currentUser}/>
         )}
         {taskList!==null && view==="list" && (
           <>
@@ -168,7 +176,7 @@ export default function TasksPage({ isAdmin, currentUser, onOpenTask, onNewTask 
   );
 }
 
-function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin }) {
+function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin, currentUser }) {
   const [dropTarget, setDropTarget] = useState(null);
   const suppressClickRef = useRef(false);
   const draggingTask = tasks.find(t=>t.id===dragging);
@@ -185,7 +193,7 @@ function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin
     window.setTimeout(() => { suppressClickRef.current = false; }, 0);
   }
   function handleDragOver(e, colId) {
-    if (!draggingTask || !canDropTask(draggingTask, colId, isAdmin)) {
+    if (!draggingTask || !canDropTask(draggingTask, colId, isAdmin, currentUser)) {
       e.dataTransfer.dropEffect = "none";
       return;
     }
@@ -211,7 +219,7 @@ function KanbanBoard({ tasks, onOpenTask, onDrop, dragging, setDragging, isAdmin
         {KANBAN_COLS.map(col=>{
           const colTasks = tasks.filter(t=>t.status===col.id);
           const isTarget = dropTarget===col.id;
-          const canDrop = draggingTask ? canDropTask(draggingTask, col.id, isAdmin) : true;
+          const canDrop = draggingTask ? canDropTask(draggingTask, col.id, isAdmin, currentUser) : true;
           return (
             <div key={col.id} className={"k-col"+(draggingTask && !canDrop ? " drop-disabled" : "")}
               onDragOver={e=>handleDragOver(e,col.id)}

@@ -6,7 +6,9 @@ import { StatusBadge } from "../components/StatusBadge.jsx";
 
 const DAY_MS = 86400000;
 
-function isoDate(d) { return d.toISOString().slice(0, 10); }
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function formatShortDate(iso) { return iso?.split("-").reverse().join(".") || "—"; }
 function formatDayLong(iso) {
   if (!iso) return "—";
@@ -112,7 +114,7 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
           <h2>Сьогодні · {formatShortDate(calendar.todayIso)}</h2>
           <span className="counter">{formatDayLong(calendar.todayIso)} · {todayEvents?.length ?? "…"} заходів</span>
           <div className="actions">
-            <a onClick={() => navigate("/planning")}>відкрити планування →</a>
+            <button type="button" className="section-action-link" onClick={() => navigate("/planning")}>відкрити планування →</button>
           </div>
         </div>
         <div className="today-list">
@@ -137,7 +139,7 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
           <h2>Активні задачі</h2>
           <span className="counter">{activeTasks?.length ?? "…"}</span>
           <div className="actions">
-            <a onClick={() => navigate("/tasks")}>всі задачі →</a>
+            <button type="button" className="section-action-link" onClick={() => navigate("/tasks")}>всі задачі →</button>
           </div>
         </div>
         <div className="today-list">

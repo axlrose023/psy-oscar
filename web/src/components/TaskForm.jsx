@@ -203,6 +203,8 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
         if (!ids.length) { setSaving(false); return; }
         updated = await tasksApi.unassign(taskId, { user_ids: ids });
       } else if (action === "start")   { updated = await tasksApi.start(taskId); }
+      else if (action === "return_assigned") { updated = await tasksApi.update(taskId, { status: "assigned" }); }
+      else if (action === "complete_subtask") { updated = await tasksApi.update(taskId, { status: "completed" }); }
       else if (action === "submit")    { updated = await tasksApi.submit(taskId); }
       else if (action === "approve")   { updated = await tasksApi.approve(taskId); }
       else if (action === "delete")    {
@@ -246,6 +248,9 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
   const isCompleted = status === "completed";
   const isReadOnly  = isCompleted;
   const subtasks    = task?.subtasks || [];
+  const isAssignee  = !!task?.assignees?.some(a => a.user?.id === currentUser?.id);
+  const isSubtask   = !!task?.parent_task_id;
+  const canCompleteSubtask = isSubtask && !isCompleted && (isAdmin || isAssignee || task?.created_by?.id === currentUser?.id);
 
   return (
     <div className="scrim" onClick={onClose}>
@@ -333,7 +338,7 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
               )}
 
               {/* 4. Підзадачі */}
-              {!isNew && (
+              {!isNew && task && !isSubtask && (
                 <div className="form-section">
                   <SectionHead num="4" title={`Підзадачі (${subtasks.length})`}
                     action={<button className="btn ghost small" type="button" onClick={() => onNewSubtask?.(taskId)}>+ Підзадача</button>}
@@ -509,9 +514,12 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
             ) : <span style={{ color:"var(--text-faint)" }}>Нова задача</span>}
           </div>
           <div className="actions">
+            {canCompleteSubtask && (
+              <button className="btn primary small" disabled={saving} onClick={() => handleAction("complete_subtask")}>Завершити підзадачу ✓</button>
+            )}
             {isAdmin && !isNew && task && (
               <>
-                {status === "under_review" && <>
+                {!isSubtask && status === "under_review" && <>
                   <button className="btn danger small" disabled={saving} onClick={() => setShowRevision(true)}>На доопрацювання</button>
                   <button className="btn primary small" disabled={saving} onClick={() => handleAction("approve")}>Затвердити ✓</button>
                 </>}
@@ -521,13 +529,22 @@ export default function TaskForm({ taskId, onClose, onSaved, onOpenEvent, onNewS
                 </>}
               </>
             )}
-            {!isAdmin && !isNew && task && (
+            {!isAdmin && !isNew && task && isAssignee && !isSubtask && (
               <>
                 {(status === "assigned" || status === "revision_requested") && (
                   <button className="btn primary small" disabled={saving} onClick={() => handleAction("start")}>Взяти в роботу ▶</button>
                 )}
                 {status === "in_progress" && (
-                  <button className="btn primary small" disabled={saving} onClick={() => handleAction("submit")}>Здати на перевірку ↑</button>
+                  <>
+                    <button className="btn ghost small" disabled={saving} onClick={() => handleAction("return_assigned")}>Назад у призначено</button>
+                    <button className="btn primary small" disabled={saving} onClick={() => handleAction("submit")}>Здати на перевірку ↑</button>
+                  </>
+                )}
+                {status === "under_review" && (
+                  <>
+                    <button className="btn ghost small" disabled={saving} onClick={() => handleAction("return_assigned")}>Назад у призначено</button>
+                    <button className="btn primary small" disabled={saving} onClick={() => handleAction("start")}>Назад у роботу</button>
+                  </>
                 )}
               </>
             )}

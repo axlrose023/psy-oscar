@@ -40,6 +40,11 @@ class TaskService(TaskManager):
         if request.parent_task_id:
             parent_task = await self._get_task_or_404(request.parent_task_id)
             self._ensure_has_access(parent_task, current_user)
+            if parent_task.parent_task_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Subtasks cannot have nested subtasks",
+                )
 
         assignee_ids = request.assigned_to_ids or []
         if current_user.role != UserRole.admin:
@@ -100,6 +105,7 @@ class TaskService(TaskManager):
             await self._record_history(task.id, current_user.id, "updated", "Task updated")
 
         if request.status is not None and request.status != task.status:
+            self._ensure_status_transition_allowed(task, request.status, current_user)
             old_status = task.status.value
             task.status = request.status
             if request.status == TaskStatus.COMPLETED and not task.completed_at:
@@ -235,13 +241,23 @@ class TaskService(TaskManager):
     async def start_task(self, task_id: UUID, current_user: User) -> Task:
         task = await self._get_task_or_404(task_id)
         self._ensure_is_assignee(task, current_user)
-        if task.status not in (TaskStatus.ASSIGNED, TaskStatus.REVISION_REQUESTED):
+        if task.status not in (
+            TaskStatus.ASSIGNED,
+            TaskStatus.REVISION_REQUESTED,
+            TaskStatus.UNDER_REVIEW,
+        ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Can only start assigned or revision-requested tasks",
+                detail="Can only start assigned, revision-requested, or under-review tasks",
             )
+        old_status = task.status
         task.status = TaskStatus.IN_PROGRESS
-        await self._record_history(task.id, current_user.id, "in_progress", "Task started")
+        description = (
+            "Task returned to work"
+            if old_status == TaskStatus.UNDER_REVIEW
+            else "Task started"
+        )
+        await self._record_history(task.id, current_user.id, "in_progress", description)
         await self.uow.commit()
         return await self.uow.tasks.get_by_id(task.id)
 
@@ -338,6 +354,34 @@ class TaskService(TaskManager):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot modify a completed task",
+            )
+
+    def _ensure_status_transition_allowed(
+        self, task: Task, new_status: TaskStatus, user: User
+    ) -> None:
+        if user.role == UserRole.admin:
+            return
+
+        if (
+            task.parent_task_id is not None
+            and new_status == TaskStatus.COMPLETED
+            and (task.is_assigned_to(user.id) or task.created_by_id == user.id)
+        ):
+            return
+
+        self._ensure_is_assignee(task, user)
+        allowed_transitions = {
+            (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS),
+            (TaskStatus.REVISION_REQUESTED, TaskStatus.IN_PROGRESS),
+            (TaskStatus.IN_PROGRESS, TaskStatus.ASSIGNED),
+            (TaskStatus.IN_PROGRESS, TaskStatus.UNDER_REVIEW),
+            (TaskStatus.UNDER_REVIEW, TaskStatus.IN_PROGRESS),
+            (TaskStatus.UNDER_REVIEW, TaskStatus.ASSIGNED),
+        }
+        if (task.status, new_status) not in allowed_transitions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This status transition is not allowed for the current user",
             )
 
     def _ensure_is_assignee(self, task: Task, user: User) -> None:

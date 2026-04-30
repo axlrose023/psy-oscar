@@ -217,6 +217,54 @@ class TestTaskWorkflow:
         resp = await client.post(f"{self.endpoint}/{task_id}/approve", headers=admin_h)
         assert resp.json()["status"] == "completed"
 
+    async def test_assignee_can_return_under_review_task_to_work_or_assigned(
+        self, client: AsyncClient, authenticated_user: dict, authenticated_psychologist: dict, psychologist_user
+    ):
+        admin_h = {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+        psych_h = {"Authorization": f"Bearer {authenticated_psychologist['access_token']}"}
+
+        resp = await client.post(
+            self.endpoint,
+            json={"title": "Return from review", "assigned_to_ids": [str(psychologist_user.id)]},
+            headers=admin_h,
+        )
+        task_id = resp.json()["id"]
+
+        await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
+
+        resp = await client.patch(
+            f"{self.endpoint}/{task_id}",
+            json={"status": "assigned"},
+            headers=psych_h,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "assigned"
+
+        await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
+        await client.post(f"{self.endpoint}/{task_id}/submit", headers=psych_h)
+
+        resp = await client.patch(
+            f"{self.endpoint}/{task_id}",
+            json={"status": "completed"},
+            headers=psych_h,
+        )
+        assert resp.status_code == 403
+
+        resp = await client.patch(
+            f"{self.endpoint}/{task_id}",
+            json={"status": "assigned"},
+            headers=psych_h,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "assigned"
+
+        await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
+        await client.post(f"{self.endpoint}/{task_id}/submit", headers=psych_h)
+
+        resp = await client.post(f"{self.endpoint}/{task_id}/start", headers=psych_h)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "in_progress"
+
 
 @pytest.mark.asyncio
 class TestTaskVisibility:
@@ -597,6 +645,63 @@ class TestSubtasks:
             headers=headers,
         )
         assert resp.status_code == 404
+
+    async def test_subtask_cannot_have_nested_subtask(
+        self, client: AsyncClient, authenticated_user: dict
+    ):
+        headers = {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+        parent = await client.post(
+            self.endpoint, json={"title": "Root parent"}, headers=headers
+        )
+        child = await client.post(
+            self.endpoint,
+            json={"title": "Child subtask", "parent_task_id": parent.json()["id"]},
+            headers=headers,
+        )
+
+        resp = await client.post(
+            self.endpoint,
+            json={"title": "Nested subtask", "parent_task_id": child.json()["id"]},
+            headers=headers,
+        )
+
+        assert resp.status_code == 400
+
+    async def test_assignee_can_complete_subtask_directly(
+        self,
+        client: AsyncClient,
+        authenticated_user: dict,
+        authenticated_psychologist: dict,
+        psychologist_user,
+    ):
+        admin_headers = {"Authorization": f"Bearer {authenticated_user['access_token']}"}
+        psych_headers = {"Authorization": f"Bearer {authenticated_psychologist['access_token']}"}
+        parent = await client.post(
+            self.endpoint,
+            json={
+                "title": "Parent for direct subtask completion",
+                "assigned_to_ids": [str(psychologist_user.id)],
+            },
+            headers=admin_headers,
+        )
+        subtask = await client.post(
+            self.endpoint,
+            json={
+                "title": "Directly completed subtask",
+                "parent_task_id": parent.json()["id"],
+            },
+            headers=psych_headers,
+        )
+
+        resp = await client.patch(
+            f"{self.endpoint}/{subtask.json()['id']}",
+            json={"status": "completed"},
+            headers=psych_headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+        assert resp.json()["completed_at"] is not None
 
     async def test_delete_parent_cascades_subtasks(
         self, client: AsyncClient, authenticated_user: dict

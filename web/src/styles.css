@@ -91,11 +91,22 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   border: 1px solid var(--accent-soft);
   display: grid;
   place-items: center;
-  font-family: var(--mono);
-  font-size: 9px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 800;
   color: var(--accent-soft);
   letter-spacing: 0.5px;
   background: rgba(0,0,0,0.25);
+  border-radius: 6px;
+}
+.topbar-brand-mark {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .topbar-brand-text {
   font-family: var(--mono);
@@ -312,11 +323,14 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   border: 1px solid var(--accent-dim);
 }
 .login-crest-mark {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
+  width: 42px;
+  height: 42px;
   color: var(--accent);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .login-card-title-row {
   flex: 1;
@@ -391,6 +405,42 @@ input, textarea, select { font-family: inherit; font-size: inherit; color: inher
   background: var(--bg-input-focus);
 }
 .textarea { resize: vertical; min-height: 60px; }
+.password-field {
+  position: relative;
+}
+.password-field .input {
+  padding-right: 44px;
+}
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.password-toggle:hover {
+  color: var(--text-bright);
+}
+.password-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.password-toggle svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .login-warn {
   border-left: 3px solid var(--warn);
@@ -1678,6 +1728,14 @@ tr:hover .row-actions { opacity: 1; }
 }
 .section-head .counter { font-family: var(--mono); font-size: 10px; color: var(--text-faint); }
 .section-head .actions { margin-left: auto; }
+.section-action-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
 
 /* Filter bar */
 .filterbar {

@@ -18,6 +18,15 @@ function fmtClock(d) {
 
 const ROLE_LABELS = { admin: "адміністратор", psychologist: "психолог", respondent: "користувач" };
 
+function OscarMark({ className = "" }) {
+  return (
+    <svg className={className} viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <path d="M32 6 52 16v15c0 13-8.5 22.5-20 27C20.5 53.5 12 44 12 31V16L32 6Z" />
+      <path d="M32 19a13 13 0 1 0 0 26 13 13 0 0 0 0-26Zm0 7a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z" />
+    </svg>
+  );
+}
+
 function userInitials(u) {
   if (!u) return "??";
   const l = (u.last_name || "")[0] || "";
@@ -51,10 +60,12 @@ export function TopBar({ currentUser, onLogout }) {
   return (
     <div className="topbar">
       <div className="topbar-brand">
-        <div className="topbar-brand-crest">УДО</div>
+        <div className="topbar-brand-crest">
+          <OscarMark className="topbar-brand-mark" />
+        </div>
         <div>
-          <div className="topbar-brand-text">АРМ ПСИХОЛОГА</div>
-          <div className="topbar-brand-sub">УДО УКРАЇНИ</div>
+          <div className="topbar-brand-text">Oscar</div>
+          <div className="topbar-brand-sub">АРМ психолога</div>
         </div>
       </div>
       <div className="topbar-main">
@@ -133,10 +144,6 @@ export function StatusBar() {
   return (
     <div className="statusbar">
       <span className="ok">● З'єднання захищене</span>
-      <span className="sep">|</span>
-      <span>PROD · UA-KYI-01</span>
-      <span className="sep">|</span>
-      <span>v 1.0</span>
       <span style={{ marginLeft: "auto" }}>ДЛЯ СЛУЖБОВОГО КОРИСТУВАННЯ</span>
     </div>
   );
