@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { events, tasks, users } from "../api/index.js";
-import { ACTIVITY_TYPES, TASK_STATUSES } from "../data.js";
+import { ACTIVITY_TYPES, AFFIRMATIONS, TASK_STATUSES } from "../data.js";
 import { StatusBadge } from "../components/StatusBadge.jsx";
 
 const DAY_MS = 86400000;
@@ -48,6 +48,7 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
       }),
     };
   });
+  const [affirmation] = useState(() => AFFIRMATIONS[Math.floor(Math.random() * AFFIRMATIONS.length)]);
   const [data, setData] = useState({ todayEvents: null, upcomingEvents: null, stats: null, activeTasks: null, birthdays: null });
 
   useEffect(() => {
@@ -168,6 +169,7 @@ export default function Dashboard({ onOpenEvent, onOpenTask }) {
 
       {/* Rail */}
       <aside className="dash-rail">
+        <QuoteCard quote={affirmation} />
         <NotesCard />
 
         {/* Дні народження */}
@@ -211,6 +213,17 @@ function Metric({ label, value, cap, tone }) {
 function ActivityChip({ value }) {
   const a = getActivity(value);
   return <span className="act-chip" title={a.full}>{a.code}</span>;
+}
+
+function QuoteCard({ quote }) {
+  const [text, ...rest] = (quote || "").split("\n");
+  return (
+    <div className="quote-card">
+      <div className="qc-label">Афірмація дня</div>
+      <div className="qc-text">«{text}»</div>
+      {rest.length > 0 && <div className="qc-author">{rest.join(" · ")}</div>}
+    </div>
+  );
 }
 
 function NotesCard() {
