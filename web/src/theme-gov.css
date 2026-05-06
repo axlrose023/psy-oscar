@@ -3895,37 +3895,73 @@ body[data-theme="gov"] {
 }
 [data-theme="gov"] .task-mini.is-overdue .due { color: var(--st-overdue); }
 
-/* ── Quote / Mood block (bigger, calmer card) ──────────── */
+/* ── Quote / Affirmation card ──────────── */
 [data-theme="gov"] .quote-card {
-  background: linear-gradient(135deg, #1E40AF 0%, #2A5BD7 100%);
-  color: #fff;
+  position: relative;
+  background: #FFFFFF;
+  color: var(--text-bright);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 18px 20px;
-  border: none;
-  box-shadow: 0 4px 12px rgba(30,64,175,0.18);
+  padding: 18px 20px 20px 22px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+  overflow: hidden;
 }
+[data-theme="gov"] .quote-card::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #3B82F6 0%, #6366F1 100%);
+  border-radius: 12px 0 0 12px;
+}
+[data-theme="gov"] .quote-card::after {
+  content: "\201C";
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 72px;
+  line-height: 1;
+  color: rgba(59,130,246,0.10);
+  pointer-events: none;
+  user-select: none;
+}
+[data-theme="gov"] .quote-card > * { position: relative; z-index: 1; }
 [data-theme="gov"] .quote-card .qc-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
-  opacity: 0.75;
-  margin-bottom: 8px;
+  color: #3B82F6;
+  margin-bottom: 10px;
+}
+[data-theme="gov"] .quote-card .qc-label::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #3B82F6;
 }
 [data-theme="gov"] .quote-card .qc-text {
-  font-family: var(--sans);
-  font-size: 15px;
-  font-weight: 500;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14.5px;
+  font-weight: 400;
   font-style: italic;
   line-height: 1.55;
+  color: #1E293B;
 }
 [data-theme="gov"] .quote-card .qc-author {
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: 11px;
   font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   margin-top: 10px;
-  opacity: 0.85;
+  color: var(--text-faint);
 }
 
 /* Notes card */
